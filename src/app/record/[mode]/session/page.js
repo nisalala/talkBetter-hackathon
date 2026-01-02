@@ -6,6 +6,9 @@ import useAudioRecorder from '@/hooks/useAudioRecorder'
 import Timer from '@/components/Timer'
 import RecordButton from '@/components/RecordButton'
 
+import { saveSession } from '@/lib/storage'
+import { useAuth } from '@/contexts/AuthContext'
+
 export default function RecordingPage({ params }) {
   const { mode } = use(params)
   const router = useRouter()
@@ -13,6 +16,8 @@ export default function RecordingPage({ params }) {
   const [setup, setSetup] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStage, setProcessingStage] = useState('')
+
+  const { isAuthenticated } = useAuth()
   
   const {
     isRecording,
@@ -86,22 +91,22 @@ export default function RecordingPage({ params }) {
       
       const analysis = await analyzeRes.json()
 
-      // Step 3: Save to history
+      // Step 3: Create result object
       const result = {
-        id: Date.now(),
         transcript,
         duration,
         mode: setup.mode,
         difficulty: setup.difficulty,
         question: setup.question,
         analysis,
-        timestamp: Date.now(),
       }
 
-      const history = JSON.parse(localStorage.getItem('talkbetter_history') || '[]')
-      history.unshift(result)
-      localStorage.setItem('talkbetter_history', JSON.stringify(history.slice(0, 50)))
+      // Step 4: Save to user's history if logged in
+      if (isAuthenticated) {
+        saveSession(result)
+      }
 
+      // Step 5: Save to sessionStorage for results page (temporary, for display)
       sessionStorage.setItem('talkbetter_results', JSON.stringify(result))
       
       router.push('/results')

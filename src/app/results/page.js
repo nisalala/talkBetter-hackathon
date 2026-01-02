@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import ScoreDisplay from '@/components/ScoreDisplay'
 import FeedbackCard from '@/components/FeedbackCard'
 import TranscriptViewer from '@/components/TranscriptViewer'
+import { useAuth } from '@/contexts/AuthContext'
 
 const modeNames = {
   pitch: 'Pitch',
@@ -24,6 +25,7 @@ const difficultyLabels = {
 
 export default function ResultsPage() {
   const router = useRouter()
+  const { isAuthenticated } = useAuth()
   const [results, setResults] = useState(null)
 
   useEffect(() => {
@@ -162,6 +164,60 @@ export default function ResultsPage() {
 
       {/* Transcript */}
       <TranscriptViewer transcript={transcript} />
+
+      {/* Track Progress CTA (only for non-logged in users) */}
+{!isAuthenticated && (
+  <div className="glass rounded-2xl p-6 mb-8 border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="text-center sm:text-left">
+        <h3 className="text-lg font-semibold text-white mb-1">
+          📈 Want to track your improvement?
+        </h3>
+        <p className="text-gray-400 text-sm">
+          Create a free profile to save your sessions and see progress over time
+        </p>
+      </div>
+      <button
+        onClick={() => router.push('/profile')}
+        className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
+                 text-white font-semibold hover:from-indigo-400 hover:to-purple-400 
+                 transition-all whitespace-nowrap shadow-lg shadow-indigo-500/25"
+      >
+        Track My Progress
+      </button>
+    </div>
+  </div>
+)}
+
+{/* Action Buttons */}
+<div className="flex flex-col sm:flex-row gap-4 mt-8">
+  <button
+    onClick={() => router.push(`/record/${mode}`)}
+    className="flex-1 px-6 py-4 rounded-xl bg-white/5 hover:bg-white/10 
+             text-white font-medium transition-colors text-center"
+  >
+    🔄 Try Again
+  </button>
+  {isAuthenticated ? (
+    <button
+      onClick={() => router.push('/profile')}
+      className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
+               hover:from-indigo-400 hover:to-purple-400
+               text-white font-medium transition-all text-center"
+    >
+      📈 View Progress
+    </button>
+  ) : (
+    <button
+      onClick={() => router.push('/')}
+      className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
+               hover:from-indigo-400 hover:to-purple-400
+               text-white font-medium transition-all text-center"
+    >
+      🎤 New Session
+    </button>
+  )}
+</div>
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 mt-8">
