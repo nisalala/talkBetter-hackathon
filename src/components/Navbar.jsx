@@ -2,9 +2,12 @@
 
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import PremiumBadge from '@/components/PremiumBadge'
+
 
 export default function Navbar() {
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated , isPremium} = useAuth()
+  
 
   return (
     <nav className="glass sticky top-0 z-50 px-6 py-4">
@@ -32,8 +35,13 @@ export default function Navbar() {
                             flex items-center justify-center text-white text-sm font-bold">
                 {user.name?.charAt(0).toUpperCase()}
               </div>
-              <span className="hidden sm:inline text-gray-300">{user.name}</span>
+        
+<div className="flex items-center gap-2">
+  <span className="text-white">{user?.name}</span>
+  <PremiumBadge />
+</div>
             </>
+            
           ) : (
             <>
               <span className="text-gray-400">Sign In</span>

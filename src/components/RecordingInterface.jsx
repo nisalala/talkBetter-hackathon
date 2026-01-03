@@ -10,10 +10,10 @@ import Timer from '@/components/Timer'
 import RecordButton from '@/components/RecordButton'
 import LiveFeedback from '@/components/LiveFeedback'
 import LiveStats from '@/components/LiveStats'
-import { saveSession } from '@/lib/storage'
 import { useAuth } from '@/contexts/AuthContext'
 import { modeQuestions } from '@/utils/modeQuestions'
 import { getModeDescription } from '@/utils/modeConfig'
+import { saveSession, getHistory } from '@/lib/storage'
 
 export default function RecordingInterface({
   mode,
@@ -106,73 +106,85 @@ export default function RecordingInterface({
     }, 100)
   }
 
-  const handleSubmit = async () => {
-    if (!audioBlob) return
+  // In RecordingInterface.jsx, update the handleSubmit function:
 
-    const questionData = question || {
-      text: 'Free practice session',
-      duration: null,
-      isCustom: true,
+const handleSubmit = async () => {
+  if (!audioBlob) return
+
+  const questionData = question || {
+    text: 'Free practice session',
+    duration: null,
+    isCustom: true,
+  }
+
+  setIsProcessing(true)
+  try {
+    setProcessingStage('Transcribing your audio...')
+    const formData = new FormData()
+    formData.append('audio', audioBlob, 'recording.webm')
+
+    const transcribeRes = await fetch('/api/transcribe', {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!transcribeRes.ok) {
+      throw new Error('Transcription failed')
     }
 
-    setIsProcessing(true)
-    try {
-      setProcessingStage('Transcribing your audio...')
-      const formData = new FormData()
-      formData.append('audio', audioBlob, 'recording.webm')
+    const { text: transcript } = await transcribeRes.json()
 
-      const transcribeRes = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!transcribeRes.ok) {
-        throw new Error('Transcription failed')
-      }
-
-      const { text: transcript } = await transcribeRes.json()
-
-      setProcessingStage('Analyzing your communication...')
-      const analyzeRes = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript,
-          duration,
-          mode: mode || 'general',
-          question: questionData,
-        }),
-      })
-
-      if (!analyzeRes.ok) {
-        throw new Error('Analysis failed')
-      }
-
-      const analysis = await analyzeRes.json()
-
-      const result = {
+    setProcessingStage('Analyzing your communication...')
+    const analyzeRes = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         transcript,
         duration,
         mode: mode || 'general',
         question: questionData,
-        analysis,
-        liveStats: stats,
-      }
+      }),
+    })
 
-      if (isAuthenticated) {
-        saveSession(result)
-      }
-
-      sessionStorage.setItem('talkbetter_results', JSON.stringify(result))
-      router.push('/results')
-    } catch (err) {
-      console.error('Processing error:', err)
-      alert('Something went wrong. Please try again.')
-    } finally {
-      setIsProcessing(false)
-      setProcessingStage('')
+    if (!analyzeRes.ok) {
+      throw new Error('Analysis failed')
     }
+
+    const analysis = await analyzeRes.json()
+
+    const result = {
+      transcript,
+      duration,
+      mode: mode || 'general',
+      question: questionData,
+      analysis,
+      liveStats: stats,
+      audioUrl: audioUrl,
+      type: 'solo', // 👈 ADD THIS - explicitly mark as solo session
+    }
+
+    // 👇 ADD DEBUG LOGGING
+    console.log('🎯 Session result:', result)
+    console.log('🔐 Is authenticated:', isAuthenticated)
+
+    if (isAuthenticated) {
+      const savedSession = saveSession(result)
+      console.log('💾 Session saved:', savedSession)
+      console.log('📜 Current history:', getHistory()) // Import getHistory at top
+    } else {
+      console.warn('⚠️ User not authenticated - session not saved to history')
+    }
+
+    sessionStorage.setItem('talkbetter_results', JSON.stringify(result))
+    router.push('/results')
+  } catch (err) {
+    console.error('Processing error:', err)
+    alert('Something went wrong. Please try again.')
+  } finally {
+    setIsProcessing(false)
+    setProcessingStage('')
   }
+}
 
   // Helper to get the title
   const getTitle = () => {

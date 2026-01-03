@@ -9,6 +9,7 @@ import FeedbackCard from '@/components/FeedbackCard'
 import TranscriptViewer from '@/components/TranscriptViewer'
 import ComparisonRadar from '@/components/ComparisonRadar'
 import VoiceCoach from '@/components/VoiceCoach'
+import PricingModal from '@/components/PricingModal'
 import { useAuth } from '@/contexts/AuthContext'
 
 const modeNames = {
@@ -29,8 +30,15 @@ const difficultyLabels = {
 
 export default function ResultsPage() {
   const router = useRouter()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isPremium, isLoading } = useAuth()
   const [results, setResults] = useState(null)
+  const [showPricingModal, setShowPricingModal] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Handle hydration
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const stored = sessionStorage.getItem('talkbetter_results')
@@ -41,6 +49,9 @@ export default function ResultsPage() {
     setResults(JSON.parse(stored))
   }, [router])
 
+  // Check premium status after mount
+  const hasPremium = mounted && isAuthenticated && isPremium && isPremium()
+
   if (!results) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -49,11 +60,10 @@ export default function ResultsPage() {
     )
   }
 
-  const { transcript, duration, mode, difficulty, question, analysis, liveStats } = results
+  const { transcript, duration, mode, difficulty, question, analysis, liveStats, audioUrl } = results
 
   // ============================================
   // 🎯 CONTEXT-AWARE: Check if response is off-topic
-  // If relevance score <= 20, zero out all scores
   // ============================================
   const relevanceScore = analysis.relevanceScore ?? 100
   const isOffTopic = relevanceScore <= 20
@@ -129,6 +139,7 @@ export default function ResultsPage() {
         </div>
       )}
 
+    
       {/* ============================================ */}
       {/* 🎯 RELEVANCE SCORE DISPLAY                  */}
       {/* ============================================ */}
@@ -162,7 +173,6 @@ export default function ResultsPage() {
             </div>
           </div>
           
-          {/* Detailed relevance issue if exists */}
           {analysis.relevanceIssue && (
             <div className="mt-4 pt-4 border-t border-white/10">
               <p className="text-gray-300 text-sm">{analysis.relevanceIssue}</p>
@@ -172,7 +182,7 @@ export default function ResultsPage() {
       )}
 
       {/* ============================================ */}
-      {/* ⚠️ OFF-TOPIC WARNING (Critical - Scores Zeroed) */}
+      {/* ⚠️ OFF-TOPIC WARNING                        */}
       {/* ============================================ */}
       {isOffTopic && (
         <div className="glass rounded-2xl p-6 mb-8 border-2 border-red-500/50 bg-gradient-to-r from-red-500/20 to-orange-500/20">
@@ -184,8 +194,7 @@ export default function ResultsPage() {
               </h3>
               <p className="text-gray-300 mb-4">
                 Because your response was completely off-topic (relevance score: {relevanceScore}/100), 
-                all performance scores have been set to zero. This helps ensure you practice answering 
-                the actual prompt.
+                all performance scores have been set to zero.
               </p>
               <div className="flex flex-wrap gap-2">
                 <span className="px-3 py-1.5 rounded-full bg-red-500/20 text-red-400 text-sm font-medium">
@@ -235,43 +244,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Only show these sections if NOT completely off-topic */}
-      {!isOffTopic && (
-        <>
-          {/* 🌟 WOW FACTOR #1: AI Voice Coach */}
-          <div className="mb-8">
-            <VoiceCoach feedback={analysis} score={displayOverallScore} />
-          </div>
-
-          {/* 🌟 WOW FACTOR #2: Comparison Radar Chart */}
-          <div className="mb-8">
-            <ComparisonRadar 
-              userScores={displayScores} 
-              mode={mode} 
-            />
-          </div>
-
-          {/* ⏱️ TIMING FEEDBACK */}
-          {analysis.metrics?.durationEvaluation && (
-            <div className={`glass rounded-xl p-4 mb-4 border ${getTimingStatusStyle(analysis.metrics.durationEvaluation.status)}`}>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">
-                  {analysis.metrics.durationEvaluation.status === 'perfect' ? '✅' : 
-                   analysis.metrics.durationEvaluation.status === 'too_short' ? '⏱️' :
-                   analysis.metrics.durationEvaluation.status === 'slightly_short' ? '⏱️' :
-                   '⏱️'}
-                </span>
-                <div>
-                  <p className="text-white font-medium">Timing</p>
-                  <p className="text-gray-300 text-sm">{analysis.metrics.durationEvaluation.message}</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Quick Stats - Always show */}
+      {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="glass rounded-xl p-4 text-center">
           <div className="text-2xl font-bold text-white">{analysis.metrics?.wpm || liveStats?.wpm || 0}</div>
@@ -296,72 +269,146 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* Filler Words Breakdown (if any) */}
-      {(analysis.metrics?.fillerWords?.counts || liveStats?.fillerWords) && 
-       Object.keys(analysis.metrics?.fillerWords?.counts || liveStats?.fillerWords || {}).length > 0 && (
-        <div className="glass rounded-xl p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">🔄</span>
-            <span className="text-white font-medium">Filler Words Used</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(analysis.metrics?.fillerWords?.counts || liveStats?.fillerWords || {})
-              .sort((a, b) => b[1] - a[1])
-              .map(([word, count]) => (
-                <span 
-                  key={word}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-                    count >= 5 ? 'bg-red-500/20 text-red-400' :
-                    count >= 3 ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}
-                >
-                  &quot;{word}&quot; × {count}
-                </span>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {/* WPM Rating - Only show if not off-topic */}
-      {!isOffTopic && analysis.metrics?.wpmRating && (
-        <div className={`glass rounded-xl p-4 mb-8 border ${
-          analysis.metrics.wpmRating.status === 'good' ? 'border-green-500/30 bg-green-500/10' :
-          analysis.metrics.wpmRating.status === 'slow' || analysis.metrics.wpmRating.status === 'fast' 
-            ? 'border-yellow-500/30 bg-yellow-500/10' :
-          'border-orange-500/30 bg-orange-500/10'
-        }`}>
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">
-              {analysis.metrics.wpmRating.status === 'good' ? '✅' : 
-               analysis.metrics.wpmRating.status === 'too_slow' ? '🐢' :
-               analysis.metrics.wpmRating.status === 'too_fast' ? '🐇' :
-               '🎯'}
-            </span>
-            <div>
-              <p className="text-white font-medium">
-                Speaking Pace: {analysis.metrics.wpmRating.rating || 'N/A'}
-              </p>
-              <p className="text-gray-300 text-sm">{analysis.metrics.wpmRating.message}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Feedback Cards - Only show if not off-topic */}
+      {/* Only show detailed feedback if NOT off-topic */}
       {!isOffTopic && (
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          <FeedbackCard 
-            title="Strengths" 
-            items={analysis.strengths || []} 
-            type="strengths" 
-          />
-          <FeedbackCard 
-            title="Areas to Improve" 
-            items={analysis.improvements || []} 
-            type="improvements" 
-          />
-        </div>
+        <>
+        {/* 🌟 AI Voice Coach */}
+          <div className="mb-8">
+            <VoiceCoach feedback={analysis} score={displayOverallScore} />
+          </div>
+          {/* ⏱️ TIMING FEEDBACK */}
+          {analysis.metrics?.durationEvaluation && (
+            <div className={`glass rounded-xl p-4 mb-4 border ${getTimingStatusStyle(analysis.metrics.durationEvaluation.status)}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">
+                  {analysis.metrics.durationEvaluation.status === 'perfect' ? '✅' : '⏱️'}
+                </span>
+                <div>
+                  <p className="text-white font-medium">Timing</p>
+                  <p className="text-gray-300 text-sm">{analysis.metrics.durationEvaluation.message}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* WPM Rating */}
+          {analysis.metrics?.wpmRating && (
+            <div className={`glass rounded-xl p-4 mb-8 border ${
+              analysis.metrics.wpmRating.status === 'good' ? 'border-green-500/30 bg-green-500/10' :
+              analysis.metrics.wpmRating.status === 'slow' || analysis.metrics.wpmRating.status === 'fast' 
+                ? 'border-yellow-500/30 bg-yellow-500/10' :
+              'border-orange-500/30 bg-orange-500/10'
+            }`}>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">
+                  {analysis.metrics.wpmRating.status === 'good' ? '✅' : 
+                   analysis.metrics.wpmRating.status === 'too_slow' ? '🐢' :
+                   analysis.metrics.wpmRating.status === 'too_fast' ? '🐇' :
+                   '🎯'}
+                </span>
+                <div>
+                  <p className="text-white font-medium">
+                    Speaking Pace: {analysis.metrics.wpmRating.rating || 'N/A'}
+                  </p>
+                  <p className="text-gray-300 text-sm">{analysis.metrics.wpmRating.message}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback Cards - Strengths & Improvements */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <FeedbackCard 
+              title="Strengths" 
+              items={analysis.strengths || []} 
+              type="strengths" 
+            />
+            <FeedbackCard 
+              title="Areas to Improve" 
+              items={analysis.improvements || []} 
+              type="improvements" 
+            />
+          </div>
+
+          {/* Timing & Pace Specific Feedback */}
+          {(analysis.timingFeedback || analysis.paceFeedback) && (
+            <div className="glass rounded-2xl p-6 mb-8">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <span>📊</span> Delivery Analysis
+              </h3>
+              <div className="space-y-4">
+                {analysis.timingFeedback && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl">⏱️</span>
+                    <div>
+                      <p className="text-white font-medium">Timing</p>
+                      <p className="text-gray-400 text-sm">{analysis.timingFeedback}</p>
+                    </div>
+                  </div>
+                )}
+                {analysis.paceFeedback && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl">🎙️</span>
+                    <div>
+                      <p className="text-white font-medium">Pace</p>
+                      <p className="text-gray-400 text-sm">{analysis.paceFeedback}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Rewritten Example */}
+          {analysis.rewrittenExample && (
+            <div className="glass rounded-2xl p-6 mb-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-xl">
+                  ✨
+                </div>
+                <h3 className="text-lg font-semibold text-indigo-400">Example Improvement</h3>
+              </div>
+              <p className="text-gray-300 italic">&ldquo;{analysis.rewrittenExample}&rdquo;</p>
+            </div>
+          )}
+
+      
+
+          {/* Filler Words Breakdown */}
+          {(analysis.metrics?.fillerWords?.counts || liveStats?.fillerWords) && 
+           Object.keys(analysis.metrics?.fillerWords?.counts || liveStats?.fillerWords || {}).length > 0 && (
+            <div className="glass rounded-xl p-4 mb-8">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🔄</span>
+                <span className="text-white font-medium">Filler Words Used</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(analysis.metrics?.fillerWords?.counts || liveStats?.fillerWords || {})
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([word, count]) => (
+                    <span 
+                      key={word}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                        count >= 5 ? 'bg-red-500/20 text-red-400' :
+                        count >= 3 ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}
+                    >
+                      &quot;{word}&quot; × {count}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* 🌟 Comparison Radar Chart - Moved towards the end */}
+          <div className="mb-8">
+            <ComparisonRadar 
+              userScores={displayScores} 
+              mode={mode} 
+            />
+          </div>
+        </>
       )}
 
       {/* Off-topic specific feedback */}
@@ -391,53 +438,73 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Timing & Pace Specific Feedback - Only show if not off-topic */}
-      {!isOffTopic && (analysis.timingFeedback || analysis.paceFeedback) && (
-        <div className="glass rounded-2xl p-6 mb-8">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <span>📊</span> Delivery Analysis
-          </h3>
-          <div className="space-y-4">
-            {analysis.timingFeedback && (
-              <div className="flex items-start gap-3">
-                <span className="text-xl">⏱️</span>
-                <div>
-                  <p className="text-white font-medium">Timing</p>
-                  <p className="text-gray-400 text-sm">{analysis.timingFeedback}</p>
-                </div>
-              </div>
-            )}
-            {analysis.paceFeedback && (
-              <div className="flex items-start gap-3">
-                <span className="text-xl">🎙️</span>
-                <div>
-                  <p className="text-white font-medium">Pace</p>
-                  <p className="text-gray-400 text-sm">{analysis.paceFeedback}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Rewritten Example - Only show if not off-topic */}
-      {!isOffTopic && analysis.rewrittenExample && (
-        <div className="glass rounded-2xl p-6 mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-xl">
-              ✨
-            </div>
-            <h3 className="text-lg font-semibold text-indigo-400">Example Improvement</h3>
-          </div>
-          <p className="text-gray-300 italic">&ldquo;{analysis.rewrittenExample}&rdquo;</p>
-        </div>
-      )}
-
       {/* Transcript */}
       <TranscriptViewer transcript={transcript} />
 
-      {/* Track Progress CTA (only for non-logged in users) */}
-      {!isAuthenticated && (
+      {/* ============================================ */}
+      {/* ✨ PREMIUM UPSELL - Get Better Analysis     */}
+      {/* ============================================ */}
+      {mounted && !hasPremium && (
+        <div className="glass rounded-2xl p-6 mb-8 border border-purple-500/30 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-pink-500/10 overflow-hidden relative mt-5">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-2xl" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-indigo-500/20 to-transparent rounded-full blur-2xl" />
+          
+          <div className="relative">
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-2xl shadow-lg shadow-purple-500/30">
+                  🚀
+                </div>
+              </div>
+              
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-white mb-1">
+                  Want Even Better Insights?
+                </h3>
+                <p className="text-gray-300 text-sm mb-3">
+                  Unlock premium features for deeper analysis and faster improvement
+                </p>
+                
+                {/* Premium features preview */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {[
+                    { icon: '💬', text: 'Two-way AI conversations' },
+                    { icon: '🎯', text: 'Advanced coaching tips' },
+                    { icon: '📈', text: 'Detailed progress tracking' },
+                    { icon: '⚡', text: 'Priority AI processing' },
+                  ].map((feature, i) => (
+                    <span 
+                      key={i}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-xs text-gray-300"
+                    >
+                      <span>{feature.icon}</span>
+                      {feature.text}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2 w-full md:w-auto">
+                <button
+                  onClick={() => setShowPricingModal(true)}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 
+                           text-white font-semibold hover:from-purple-400 hover:to-indigo-400 
+                           transition-all shadow-lg shadow-purple-500/25 whitespace-nowrap"
+                >
+                  ✨ Upgrade to Premium
+                </button>
+                <p className="text-center text-xs text-gray-500">
+                  7-day free trial available
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Track Progress CTA (for non-logged in users) */}
+      {mounted && !isAuthenticated && (
         <div className="glass rounded-2xl p-6 mb-8 border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-center sm:text-left">
@@ -469,7 +536,7 @@ export default function ResultsPage() {
         >
           🔄 Try Again
         </button>
-        {isAuthenticated ? (
+        {mounted && isAuthenticated ? (
           <button
             onClick={() => router.push('/profile')}
             className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
@@ -489,6 +556,14 @@ export default function ResultsPage() {
           </button>
         )}
       </div>
+
+      {/* Pricing Modal */}
+      {showPricingModal && (
+        <PricingModal 
+          onClose={() => setShowPricingModal(false)} 
+          feature="Premium Analysis"
+        />
+      )}
     </div>
   )
 }
