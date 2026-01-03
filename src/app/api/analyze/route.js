@@ -155,6 +155,182 @@ function analyzeFillerWords(transcript) {
   return { counts, total }
 }
 
+// ============================================
+// 🆕 GRAMMAR ANALYSIS (Pre-check common issues)
+// ============================================
+function analyzeBasicGrammar(transcript) {
+  const issues = []
+  
+  // Common grammar patterns to check
+  // ❌ REMOVED: Capitalization - this is a transcription artifact, not a speech error
+  const patterns = [
+    {
+      pattern: /\b(he|she|it)\s+(have|are)\b/gi,
+      issue: 'Subject-verb agreement',
+      type: 'agreement',
+    },
+    {
+      pattern: /\b(they|we|you)\s+(has|is)\b/gi,
+      issue: 'Subject-verb agreement',
+      type: 'agreement',
+    },
+    {
+      pattern: /\b(could|would|should|must)\s+of\b/gi,
+      issue: '"Could of" should be "could have"',
+      type: 'word_choice',
+    },
+    {
+      pattern: /\bdoesn't\s+\w+s\b/gi,
+      issue: 'Double negative verb form',
+      type: 'verb_form',
+    },
+    {
+      pattern: /\bmore\s+\w+er\b/gi,
+      issue: 'Double comparative (more + -er)',
+      type: 'comparative',
+    },
+    {
+      pattern: /\bmost\s+\w+est\b/gi,
+      issue: 'Double superlative (most + -est)',
+      type: 'superlative',
+    },
+    // Additional speech-relevant patterns
+    {
+      pattern: /\b(me|him|her|them)\s+(and\s+)?(me|I)\b/gi,
+      issue: 'Pronoun case error',
+      type: 'pronoun',
+    },
+    {
+      pattern: /\bain't\b/gi,
+      issue: 'Non-standard contraction',
+      type: 'word_choice',
+    },
+    {
+      pattern: /\b(don't|doesn't)\s+got\b/gi,
+      issue: '"Don\'t got" should be "don\'t have"',
+      type: 'word_choice',
+    },
+    {
+      pattern: /\bsuppose\s+to\b/gi,
+      issue: '"Suppose to" should be "supposed to"',
+      type: 'word_choice',
+    },
+    {
+      pattern: /\buse\s+to\b/gi,
+      issue: '"Use to" should be "used to"',
+      type: 'word_choice',
+    },
+  ]
+
+  let potentialIssueCount = 0
+  
+  patterns.forEach(({ pattern, issue, type }) => {
+    const matches = transcript.match(pattern)
+    if (matches) {
+      potentialIssueCount += matches.length
+      issues.push({
+        type,
+        issue,
+        examples: matches.slice(0, 3),
+        count: matches.length,
+      })
+    }
+  })
+
+  return {
+    potentialIssues: issues,
+    issueCount: potentialIssueCount,
+  }
+}
+
+// ============================================
+// 🆕 PRONUNCIATION INFERENCE
+// ============================================
+function analyzePronunciationIndicators(transcript) {
+  // These patterns might indicate pronunciation issues when transcribed
+  const indicators = {
+    // Words that are often mispronounced
+    commonMispronunciations: [
+      { word: 'expresso', correct: 'espresso' },
+      { word: 'supposably', correct: 'supposedly' },
+      { word: 'probly', correct: 'probably' },
+      { word: 'prolly', correct: 'probably' },
+      { word: 'definately', correct: 'definitely' },
+      { word: 'nucular', correct: 'nuclear' },
+      { word: 'excape', correct: 'escape' },
+      { word: 'excetera', correct: 'et cetera' },
+      { word: 'aks', correct: 'ask' },
+      { word: 'libary', correct: 'library' },
+      { word: 'febuary', correct: 'February' },
+      { word: 'artic', correct: 'arctic' },
+      { word: 'jewlery', correct: 'jewelry' },
+      { word: 'pronounciation', correct: 'pronunciation' },
+      { word: 'mischievious', correct: 'mischievous' },
+    ],
+    // Merged/slurred words (informal speech)
+    slurredPatterns: [
+      { pattern: /\bgonna\b/gi, formal: 'going to' },
+      { pattern: /\bwanna\b/gi, formal: 'want to' },
+      { pattern: /\bgotta\b/gi, formal: 'got to' },
+      { pattern: /\bkinda\b/gi, formal: 'kind of' },
+      { pattern: /\bsorta\b/gi, formal: 'sort of' },
+      { pattern: /\blemme\b/gi, formal: 'let me' },
+      { pattern: /\bgivme\b/gi, formal: 'give me' },
+      { pattern: /\bdunno\b/gi, formal: 'don\'t know' },
+      { pattern: /\bcause\b/gi, formal: 'because' },
+      { pattern: /\bcuz\b/gi, formal: 'because' },
+    ],
+  }
+
+  const found = {
+    mispronunciations: [],
+    informalSpeech: [],
+  }
+
+  // Check for mispronunciations
+  indicators.commonMispronunciations.forEach(({ word, correct }) => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi')
+    const matches = transcript.match(regex)
+    if (matches) {
+      found.mispronunciations.push({
+        said: word,
+        shouldBe: correct,
+        count: matches.length,
+      })
+    }
+  })
+
+  // Check for slurred/informal speech
+  indicators.slurredPatterns.forEach(({ pattern, formal }) => {
+    const matches = transcript.match(pattern)
+    if (matches) {
+      found.informalSpeech.push({
+        said: matches[0],
+        formal,
+        count: matches.length,
+      })
+    }
+  })
+
+  // Calculate a basic clarity score based on issues found
+  const totalIssues = found.mispronunciations.length + found.informalSpeech.length
+  const wordCount = transcript.split(/\s+/).length
+  const issueRatio = totalIssues / Math.max(wordCount, 1)
+  
+  // Estimate pronunciation score (this is approximate since we're working with text)
+  let estimatedScore = 100
+  estimatedScore -= found.mispronunciations.length * 5
+  estimatedScore -= found.informalSpeech.length * 2
+  estimatedScore = Math.max(0, Math.min(100, estimatedScore))
+
+  return {
+    mispronunciations: found.mispronunciations,
+    informalSpeech: found.informalSpeech,
+    estimatedScore,
+    issueCount: totalIssues,
+  }
+}
+
 export async function POST(request) {
   try {
     const { transcript, duration, mode, question, difficulty } = await request.json()
@@ -168,6 +344,8 @@ export async function POST(request) {
         strengths: [],
         improvements: ['Make sure your microphone is working and speak clearly.'],
         metrics: { wordCount: 0, wpm: 0, duration: duration || 0, fillerWords: { counts: {}, total: 0 } },
+        grammar: { score: 0, issues: [] },
+        pronunciation: { score: 0, issues: [] },
       })
     }
 
@@ -177,11 +355,16 @@ export async function POST(request) {
     const wordCount = words.length
     const wpm = duration > 0 ? Math.round((wordCount / duration) * 60) : 0
     const fillerAnalysis = analyzeFillerWords(transcript)
+    const basicGrammar = analyzeBasicGrammar(transcript)
+    const pronunciationIndicators = analyzePronunciationIndicators(transcript)
     
     const targetDuration = question?.duration || null
     const durationEval = evaluateDuration(duration, targetDuration)
     const wpmEval = evaluateWPM(wpm)
 
+    // ============================================
+    // 🆕 ENHANCED PROMPT WITH GRAMMAR & PRONUNCIATION
+    // ============================================
     const systemPrompt = `${modeConfig.systemPrompt}
 
 You are analyzing a ${modeConfig.name.toLowerCase()} response.
@@ -210,6 +393,31 @@ RELEVANCE SCORE GUIDE:
 If relevanceScore is 20 or below, the response is INVALID and should not receive meaningful scores.
 =======================================
 
+=== GRAMMAR ANALYSIS ===
+Analyze the transcript for SPOKEN grammar issues including:
+- Subject-verb agreement (e.g., "he have" → "he has")
+- Tense consistency (switching between past and present incorrectly)
+- Sentence structure (incomplete thoughts, run-on sentences when spoken)
+- Word choice errors (e.g., "could of" → "could have", "supposably" → "supposedly")
+- Pronoun errors (e.g., "me and him went" → "he and I went")
+
+DO NOT FLAG:
+- Capitalization (handled by transcription AI)
+- Punctuation (not relevant to speech)
+- Contractions (normal in speech)
+
+Provide a grammar score (0-100) and list specific spoken grammar issues found.
+========================
+
+=== PRONUNCIATION & CLARITY ===
+Based on the transcript, infer pronunciation and clarity:
+- Are words clear and properly formed?
+- Any apparent mispronunciations that affected transcription?
+- Speaking clarity overall
+
+Note: Since this is transcribed text, focus on indicators of unclear speech.
+================================
+
 TIMING: ${durationEval.message}
 PACE: ${wpmEval.message}
 
@@ -231,6 +439,30 @@ Return ONLY valid JSON with this exact structure:
     "${modeConfig.metrics[2]}": <0-100>,
     "${modeConfig.metrics[3]}": <0-100>
   },
+  "grammar": {
+    "score": <0-100, grammar quality>,
+    "issues": [
+      {
+        "type": "<error type: agreement|tense|structure|word_choice|article|pronoun|other>",
+        "original": "<the problematic phrase>",
+        "suggestion": "<corrected version>",
+        "explanation": "<brief explanation>"
+      }
+    ],
+    "feedback": "<overall grammar feedback>"
+  },
+  "pronunciation": {
+    "score": <0-100, estimated clarity/pronunciation>,
+    "clarity": "<clear|mostly_clear|unclear>",
+    "issues": [
+      {
+        "word": "<word with potential issue>",
+        "suggestion": "<how it should sound/be pronounced>",
+        "type": "<mispronunciation|slurred|unclear>"
+      }
+    ],
+    "feedback": "<overall pronunciation/clarity feedback>"
+  },
   "strengths": ["<specific strength 1>", "<specific strength 2>", "<specific strength 3>"],
   "improvements": ["<specific actionable improvement 1>", "<specific improvement 2>", "<specific improvement 3>"],
   "timingFeedback": "<feedback on timing based on target duration>",
@@ -251,7 +483,7 @@ Return ONLY valid JSON with this exact structure:
           { role: 'user', content: systemPrompt },
         ],
         temperature: 0.7,
-        max_tokens: 1500,
+        max_tokens: 2000, // Increased for grammar/pronunciation
       }),
     })
 
@@ -266,7 +498,6 @@ Return ONLY valid JSON with this exact structure:
 
     try {
       const content = data.choices[0]?.message?.content || '{}'
-      // Extract JSON from potential markdown code blocks
       const jsonMatch = content.match(/\{[\s\S]*\}/)
       analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
     } catch (parseError) {
@@ -280,6 +511,8 @@ Return ONLY valid JSON with this exact structure:
           [modeConfig.metrics[2]]: 50, 
           [modeConfig.metrics[3]]: 50 
         },
+        grammar: { score: 70, issues: [], feedback: 'Unable to analyze grammar.' },
+        pronunciation: { score: 70, issues: [], clarity: 'mostly_clear', feedback: 'Unable to analyze pronunciation.' },
         strengths: ['Completed the recording'],
         improvements: ['Try again for detailed feedback'],
       }
@@ -299,7 +532,6 @@ Return ONLY valid JSON with this exact structure:
     if (relevanceScore <= 20) {
       isOffTopic = true
       finalScore = 0
-      // Zero out all category scores
       Object.keys(finalScores).forEach(key => {
         finalScores[key] = 0
       })
@@ -307,24 +539,65 @@ Return ONLY valid JSON with this exact structure:
     // If relevance is 21-50, significantly penalize
     else if (relevanceScore <= 50) {
       finalScore = Math.min(finalScore, 40)
-      // Cap all category scores at 50
       Object.keys(finalScores).forEach(key => {
         finalScores[key] = Math.min(finalScores[key] || 0, 50)
       })
     }
     // Normal scoring for relevance > 50
     else {
-      // Apply duration penalty
       finalScore = Math.max(0, finalScore - durationEval.penalty)
-      
-      // Apply WPM penalty
       finalScore = Math.max(0, finalScore - wpmEval.penalty)
       
-      // Apply filler word penalty (only if more than 3)
       if (fillerAnalysis.total > 3) {
         const fillerPenalty = Math.floor((fillerAnalysis.total - 3) / 2)
         finalScore = Math.max(0, finalScore - fillerPenalty)
       }
+    }
+
+    // ============================================
+    // 🆕 MERGE LOCAL ANALYSIS WITH AI ANALYSIS
+    // ============================================
+    
+    // Merge grammar data
+    const grammarData = {
+      score: analysis.grammar?.score || 80,
+      issues: [
+        ...(analysis.grammar?.issues || []),
+        ...basicGrammar.potentialIssues.map(issue => ({
+          type: issue.type,
+          original: issue.examples?.[0] || '',
+          suggestion: '',
+          explanation: issue.issue,
+        })),
+      ].slice(0, 10), // Limit to 10 issues
+      feedback: analysis.grammar?.feedback || 'Grammar analysis complete.',
+      issueCount: (analysis.grammar?.issues?.length || 0) + basicGrammar.issueCount,
+    }
+
+    // Merge pronunciation data
+    const pronunciationData = {
+      score: analysis.pronunciation?.score || pronunciationIndicators.estimatedScore,
+      clarity: analysis.pronunciation?.clarity || 'mostly_clear',
+      issues: [
+        ...(analysis.pronunciation?.issues || []),
+        ...pronunciationIndicators.mispronunciations.map(m => ({
+          word: m.said,
+          suggestion: m.shouldBe,
+          type: 'mispronunciation',
+        })),
+        ...pronunciationIndicators.informalSpeech.map(s => ({
+          word: s.said,
+          suggestion: s.formal,
+          type: 'informal',
+        })),
+      ].slice(0, 10), // Limit to 10 issues
+      feedback: analysis.pronunciation?.feedback || 'Pronunciation analysis complete.',
+      informalSpeech: pronunciationIndicators.informalSpeech,
+    }
+
+    // Apply grammar penalty to final score
+    if (grammarData.score < 70) {
+      finalScore = Math.max(0, finalScore - Math.round((70 - grammarData.score) / 5))
     }
 
     // Build final analysis response
@@ -334,6 +607,11 @@ Return ONLY valid JSON with this exact structure:
       isOffTopic,
       overallScore: Math.round(finalScore),
       scores: finalScores,
+      
+      // 🆕 Grammar & Pronunciation
+      grammar: grammarData,
+      pronunciation: pronunciationData,
+      
       strengths: isOffTopic 
         ? ['You completed the recording'] 
         : (analysis.strengths || []),
@@ -375,6 +653,8 @@ Return ONLY valid JSON with this exact structure:
       overallScore: 0, 
       relevanceScore: 0,
       scores: {}, 
+      grammar: { score: 0, issues: [], feedback: 'Analysis failed.' },
+      pronunciation: { score: 0, issues: [], feedback: 'Analysis failed.' },
       strengths: [], 
       improvements: ['Please try again.'] 
     }, { status: 500 })

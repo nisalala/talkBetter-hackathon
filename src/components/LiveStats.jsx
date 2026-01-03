@@ -2,8 +2,8 @@
 
 'use client'
 
-export default function LiveStats({ stats }) {
-  const { wordCount, wpm, fillerCount, sentenceCount } = stats
+export default function LiveStats({ stats, showContextScore = false }) {
+  const { wordCount, wpm, fillerCount, contextScore } = stats
 
   const getPaceStatus = () => {
     if (wpm === 0) return { label: '...', color: 'text-gray-400', bg: 'bg-gray-500/20' }
@@ -19,8 +19,16 @@ export default function LiveStats({ stats }) {
     return { color: 'text-red-400', bg: 'bg-red-500/20' }
   }
 
+  const getContextStatus = () => {
+    if (contextScore === undefined || contextScore === null) return { label: '...', color: 'text-gray-400' }
+    if (contextScore >= 70) return { label: '✓', color: 'text-green-400' }
+    if (contextScore >= 50) return { label: '~', color: 'text-yellow-400' }
+    return { label: '!', color: 'text-red-400' }
+  }
+
   const paceStatus = getPaceStatus()
   const fillerStatus = getFillerStatus()
+  const contextStatus = getContextStatus()
 
   return (
     <div className="flex items-center justify-center gap-4 mb-4">
@@ -52,6 +60,19 @@ export default function LiveStats({ stats }) {
         </div>
         <div className="text-[10px] text-gray-500 uppercase">Fillers</div>
       </div>
+
+      {/* Context Score - Only for non-general modes */}
+      {showContextScore && (
+        <>
+          <div className="w-px h-8 bg-white/10" />
+          <div className="text-center">
+            <div className={`text-lg font-bold ${contextStatus.color}`}>
+              {contextStatus.label}
+            </div>
+            <div className="text-[10px] text-gray-500 uppercase">Topic</div>
+          </div>
+        </>
+      )}
 
       {/* Filler words popup - only show if there are fillers */}
       {stats.fillerWords && Object.keys(stats.fillerWords).length > 0 && (

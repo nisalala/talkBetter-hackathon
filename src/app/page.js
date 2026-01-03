@@ -104,12 +104,12 @@ export default function Home() {
     setIsCustomMode(false)
   }
 
-  // Handle custom question
-  const handleCustomQuestion = (questionText) => {
+  // ✅ UPDATED: Handle custom question with duration
+  const handleCustomQuestion = (questionText, duration = 60) => {
     setCurrentQuestion({
       id: 'custom',
       text: questionText,
-      duration: 60,
+      duration: duration, // Now accepts custom duration from slider
       isCustom: true,
       tips: [],
     })
@@ -201,7 +201,6 @@ export default function Home() {
                 <span>💬</span>
                 <span className="hidden sm:inline">Two-way</span>
                 <span className="sm:hidden">2-way</span>
-                {/* Premium lock indicator - only show after mounted */}
                 {mounted && !hasPremiumAccess && (
                   <span className="text-yellow-400 text-xs">🔒</span>
                 )}
@@ -236,7 +235,7 @@ export default function Home() {
         />
       )}
 
-      {/* Premium Upsell Banner - Only render after mounted to avoid hydration mismatch */}
+      {/* Premium Upsell Banner */}
       {mounted && interactionType === 'single' && !hasPremiumAccess && (
         <div className="glass rounded-2xl p-4 mb-6 border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">

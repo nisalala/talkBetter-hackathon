@@ -11,10 +11,51 @@ const FILLER_WORDS = [
 // Minimum audio size to send (in bytes) - prevents invalid file errors
 const MIN_AUDIO_SIZE = 10000 // ~10KB minimum
 
+// Keywords for context-awareness per mode
+const MODE_KEYWORDS = {
+  pitch: {
+    keywords: ['product', 'service', 'solution', 'problem', 'customer', 'market', 'business', 'startup', 'idea', 'value', 'offer', 'price', 'benefit', 'feature', 'unique', 'better', 'help', 'solve', 'need', 'buy', 'sell', 'invest', 'revenue', 'growth', 'team', 'opportunity', 'million', 'percent', 'users', 'customers', 'app', 'platform', 'technology'],
+    offTopicPhrases: ['my favorite movie', 'what i ate', 'the weather today', 'my pet', 'last night i watched', 'my vacation'],
+    contextHint: 'pitching your product or idea',
+  },
+  interview: {
+    keywords: ['experience', 'worked', 'job', 'role', 'team', 'project', 'skill', 'learned', 'achieved', 'managed', 'led', 'developed', 'improved', 'challenge', 'problem', 'solution', 'goal', 'result', 'company', 'position', 'career', 'qualified', 'strength', 'weakness', 'example', 'situation', 'responsible', 'hired'],
+    offTopicPhrases: ['my vacation last year', 'my favorite tv show', 'what i had for dinner', 'my pets name'],
+    contextHint: 'answering interview questions',
+  },
+  meeting: {
+    keywords: ['update', 'status', 'progress', 'project', 'deadline', 'timeline', 'task', 'action', 'decision', 'team', 'next steps', 'plan', 'goal', 'issue', 'blocker', 'help', 'need', 'review', 'feedback', 'agenda', 'priority', 'budget', 'resource', 'deliverable', 'meeting', 'discuss'],
+    offTopicPhrases: ['my weekend plans', 'the game last night', 'did you see that show', 'speaking of vacations'],
+    contextHint: 'discussing work updates',
+  },
+  date: {
+    keywords: ['like', 'enjoy', 'love', 'hobby', 'interest', 'fun', 'travel', 'music', 'food', 'movie', 'book', 'family', 'friend', 'passion', 'dream', 'weekend', 'free time', 'story', 'feel', 'think', 'believe', 'favorite', 'grew up', 'childhood', 'relationship'],
+    offTopicPhrases: ['quarterly report', 'synergy', 'stakeholders', 'deliverables', 'action items', 'kpi', 'roi'],
+    contextHint: 'having a personal conversation',
+  },
+  difficult: {
+    keywords: ['feel', 'understand', 'concern', 'issue', 'problem', 'situation', 'perspective', 'hear', 'appreciate', 'respect', 'boundary', 'need', 'want', 'expect', 'hope', 'resolve', 'solution', 'together', 'forward', 'feedback', 'honest', 'difficult', 'uncomfortable', 'apologize', 'sorry', 'frustrat'],
+    offTopicPhrases: [],
+    contextHint: 'addressing the difficult topic',
+  },
+  speech: {
+    keywords: ['today', 'talk', 'share', 'story', 'message', 'point', 'important', 'imagine', 'consider', 'together', 'thank', 'welcome', 'journey', 'experience', 'learned', 'believe', 'future', 'change', 'action', 'remember', 'finally', 'conclusion', 'audience', 'listen'],
+    offTopicPhrases: [],
+    contextHint: 'delivering your speech',
+  },
+  general: {
+    keywords: [],
+    offTopicPhrases: [],
+    contextHint: '',
+  },
+}
+
 export default function useLiveFeedback({ 
   targetDuration = 60,
   isRecording = false,
   currentDuration = 0,
+  mode = 'general',
+  questionText = '',
 }) {
   const [currentFeedback, setCurrentFeedback] = useState(null)
   const [allTranscript, setAllTranscript] = useState('')
@@ -25,6 +66,7 @@ export default function useLiveFeedback({
     fillerWords: {},
     sentenceCount: 0,
     avgWordsPerSentence: 0,
+    contextScore: 100,
   })
   
   // All refs
@@ -38,9 +80,23 @@ export default function useLiveFeedback({
   const halfwayShownRef = useRef(false)
   const timeWarningsShownRef = useRef(new Set())
   const isRunningRef = useRef(false)
-  const allChunksRef = useRef([]) // Store ALL audio chunks for cumulative sending
+  const allChunksRef = useRef([])
+  const contextWarningShownRef = useRef(false)
+  const modeRef = useRef(mode)
+  const questionTextRef = useRef(questionText)
 
-  // Cooldowns
+  // Update refs when props change
+  useEffect(() => {
+    modeRef.current = mode
+    questionTextRef.current = questionText
+  }, [mode, questionText])
+
+  // Get mode config
+  const getModeConfig = useCallback(() => {
+    return MODE_KEYWORDS[modeRef.current] || MODE_KEYWORDS.general
+  }, [])
+
+  // Cooldowns (in seconds)
   const feedbackCooldowns = {
     pace_slow: 10,
     pace_fast: 10,
@@ -54,6 +110,8 @@ export default function useLiveFeedback({
     rambling: 15,
     great_streak: 25,
     repetition: 15,
+    context_warning: 999,
+    context_hint: 999,
   }
 
   const canShowFeedback = useCallback((type) => {
@@ -66,6 +124,7 @@ export default function useLiveFeedback({
   const showFeedback = useCallback((type, message, priority = 'normal') => {
     if (priority === 'high' || canShowFeedback(type)) {
       lastFeedbackTimeRef.current[type] = Date.now()
+      console.log('📢 Showing feedback:', type, message) // Debug log
       setCurrentFeedback({ type, message, id: Date.now(), priority })
     }
   }, [canShowFeedback])
@@ -74,7 +133,52 @@ export default function useLiveFeedback({
     setCurrentFeedback(null)
   }, [])
 
-  // Analyze transcript
+  // Calculate context relevance score
+  const calculateContextScore = useCallback((transcript) => {
+    const modeConfig = getModeConfig()
+    const currentMode = modeRef.current
+    
+    // Don't check context for general mode or very short transcripts
+    if (currentMode === 'general' || !transcript || transcript.length < 50) {
+      return 100
+    }
+
+    const lowerTranscript = transcript.toLowerCase()
+    const words = lowerTranscript.split(/\s+/).filter(w => w.length > 0)
+    
+    // Check for clearly off-topic phrases
+    for (const phrase of modeConfig.offTopicPhrases) {
+      if (lowerTranscript.includes(phrase.toLowerCase())) {
+        console.log('🚫 Off-topic phrase detected:', phrase) // Debug log
+        return 25
+      }
+    }
+
+    // Count relevant keywords found
+    let keywordMatches = 0
+    const foundKeywords = []
+    for (const keyword of modeConfig.keywords) {
+      if (lowerTranscript.includes(keyword.toLowerCase())) {
+        keywordMatches++
+        foundKeywords.push(keyword)
+      }
+    }
+
+    console.log(`📊 Context check - Mode: ${currentMode}, Words: ${words.length}, Keywords found: ${keywordMatches}`, foundKeywords.slice(0, 5)) // Debug log
+
+    // Calculate score based on keyword density and word count
+    if (keywordMatches === 0 && words.length > 40) {
+      return 35
+    } else if (keywordMatches < 2 && words.length > 60) {
+      return 50
+    } else if (keywordMatches < 3 && words.length > 80) {
+      return 60
+    }
+    
+    return Math.min(100, 65 + keywordMatches * 5)
+  }, [getModeConfig])
+
+  // Analyze transcript and provide feedback
   const analyzeAndFeedback = useCallback((fullTranscript, duration) => {
     if (!fullTranscript.trim() || duration < 5) return
 
@@ -99,6 +203,9 @@ export default function useLiveFeedback({
       }
     })
 
+    // Calculate context score
+    const contextScore = calculateContextScore(fullTranscript)
+
     setStats({
       wordCount,
       wpm,
@@ -106,9 +213,55 @@ export default function useLiveFeedback({
       fillerWords: fillerCounts,
       sentenceCount,
       avgWordsPerSentence,
+      contextScore,
     })
 
+    // ============================================
+    // CONTEXT AWARENESS FEEDBACK
+    // ============================================
+    const modeConfig = getModeConfig()
+    const currentMode = modeRef.current
+    
+    if (currentMode !== 'general' && !contextWarningShownRef.current) {
+      if (contextScore <= 35 && wordCount > 30) {
+        // Clearly off-topic - high priority warning
+        console.log('🎯 Triggering context_warning') // Debug log
+        showFeedback(
+          'context_warning', 
+          `🎯 Off topic! Focus on ${modeConfig.contextHint}.`,
+          'high'
+        )
+        contextWarningShownRef.current = true
+      } else if (contextScore <= 50 && wordCount > 50) {
+        // Drifting off-topic
+        console.log('📌 Triggering context_hint (drifting)') // Debug log
+        showFeedback(
+          'context_hint', 
+          `📌 Stay focused on ${modeConfig.contextHint}.`,
+          'high'
+        )
+        contextWarningShownRef.current = true
+      } else if (contextScore <= 60 && wordCount > 70) {
+        // Soft hint
+        console.log('💡 Triggering context_hint (soft)') // Debug log
+        showFeedback(
+          'context_hint', 
+          `💡 Include more details relevant to your ${currentMode} practice.`,
+          'normal'
+        )
+        contextWarningShownRef.current = true
+      }
+    }
+
+    // Reset context warning if they get back on track (allow future warnings)
+    if (contextScore > 75 && contextWarningShownRef.current && wordCount > 100) {
+      console.log('✅ Back on track, resetting context warning flag') // Debug log
+      contextWarningShownRef.current = false
+    }
+
+    // ============================================
     // PACE FEEDBACK
+    // ============================================
     const previousPaceStatus = lastPaceStatusRef.current
     let currentPaceStatus = 'normal'
 
@@ -122,18 +275,20 @@ export default function useLiveFeedback({
 
     if (currentPaceStatus !== previousPaceStatus && duration > 8 && wpm > 0) {
       if (currentPaceStatus === 'slow') {
-        showFeedback('pace_slow', `Speaking a bit slow (${wpm} WPM). Pick up the pace!`)
+        showFeedback('pace_slow', `🐢 Speaking a bit slow (${wpm} WPM). Pick up the pace!`)
       } else if (currentPaceStatus === 'fast') {
-        showFeedback('pace_fast', `Slow down! You're at ${wpm} WPM. Take a breath.`)
+        showFeedback('pace_fast', `🐇 Slow down! You're at ${wpm} WPM. Take a breath.`)
       } else if (currentPaceStatus === 'perfect' && previousPaceStatus) {
-        showFeedback('pace_improved', `Great adjustment! ${wpm} WPM is perfect! 👏`)
+        showFeedback('pace_improved', `✅ Great adjustment! ${wpm} WPM is perfect!`)
       } else if (currentPaceStatus === 'normal' && previousPaceStatus) {
-        showFeedback('pace_improved', `Better pace now at ${wpm} WPM!`)
+        showFeedback('pace_improved', `👍 Better pace now at ${wpm} WPM!`)
       }
       lastPaceStatusRef.current = currentPaceStatus
     }
 
+    // ============================================
     // FILLER WORDS FEEDBACK
+    // ============================================
     if (totalFillers > 0) {
       const mostUsed = Object.entries(fillerCounts).sort((a, b) => b[1] - a[1])[0]
       
@@ -143,25 +298,30 @@ export default function useLiveFeedback({
         if (count >= 5 && canShowFeedback('filler_alert')) {
           showFeedback('filler_alert', `🚨 "${word}" used ${count} times! Try pausing instead.`, 'high')
         } else if (count >= 3 && canShowFeedback('filler_words')) {
-          showFeedback('filler_words', `You've said "${word}" ${count} times. Be mindful!`)
+          showFeedback('filler_words', `🔄 You've said "${word}" ${count} times. Be mindful!`)
         }
       }
     }
 
+    // ============================================
     // SENTENCE LENGTH FEEDBACK
+    // ============================================
     if (avgWordsPerSentence > 30 && canShowFeedback('rambling')) {
-      showFeedback('rambling', `Sentences are long (~${avgWordsPerSentence} words). Break it up!`)
+      showFeedback('rambling', `📝 Sentences are long (~${avgWordsPerSentence} words). Break it up!`)
     }
 
+    // ============================================
     // POSITIVE REINFORCEMENT
+    // ============================================
     if (duration > 25 && 
         totalFillers === 0 && 
         wpm >= 120 && wpm <= 150 && 
+        contextScore >= 70 &&
         canShowFeedback('great_streak')) {
-      showFeedback('great_streak', `🌟 Excellent! Perfect pace, no fillers!`)
+      showFeedback('great_streak', `🌟 Excellent! Perfect pace, on topic, no fillers!`)
     }
 
-  }, [showFeedback, canShowFeedback])
+  }, [showFeedback, canShowFeedback, calculateContextScore, getModeConfig])
 
   // Time-based feedback
   useEffect(() => {
@@ -191,6 +351,8 @@ export default function useLiveFeedback({
   const startLiveTranscription = useCallback(async () => {
     if (isRunningRef.current) return
     isRunningRef.current = true
+    
+    console.log('🎙️ Starting live transcription for mode:', modeRef.current) // Debug log
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -208,7 +370,7 @@ export default function useLiveFeedback({
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mediaRecorder
-      allChunksRef.current = [] // Reset chunks
+      allChunksRef.current = []
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -236,7 +398,6 @@ export default function useLiveFeedback({
         try {
           const formData = new FormData()
           
-          // Use appropriate file extension
           const extension = mimeType.includes('webm') ? 'webm' : 
                            mimeType.includes('mp4') ? 'mp4' : 
                            mimeType.includes('ogg') ? 'ogg' : 'webm'
@@ -250,7 +411,7 @@ export default function useLiveFeedback({
           if (response.ok) {
             const { text } = await response.json()
             if (text && text.trim()) {
-              // Replace entire transcript (since we send cumulative audio)
+              console.log('📝 Transcription received:', text.substring(0, 100) + '...') // Debug log
               setAllTranscript(text)
               
               const actualDuration = Math.round((Date.now() - startTimeRef.current) / 1000)
@@ -264,7 +425,7 @@ export default function useLiveFeedback({
         } finally {
           isProcessingRef.current = false
         }
-      }, 5000) // Every 5 seconds
+      }, 5000)
 
       // Start recording - collect data every second
       mediaRecorder.start(1000)
@@ -304,6 +465,8 @@ export default function useLiveFeedback({
 
   // Public start function
   const startFeedback = useCallback(() => {
+    console.log('🚀 Starting feedback for mode:', modeRef.current) // Debug log
+    
     setAllTranscript('')
     setStats({ 
       wordCount: 0, 
@@ -312,6 +475,7 @@ export default function useLiveFeedback({
       fillerWords: {}, 
       sentenceCount: 0,
       avgWordsPerSentence: 0,
+      contextScore: 100,
     })
     setCurrentFeedback(null)
     
@@ -319,6 +483,7 @@ export default function useLiveFeedback({
     lastPaceStatusRef.current = null
     halfwayShownRef.current = false
     timeWarningsShownRef.current = new Set()
+    contextWarningShownRef.current = false
     transcriptChunksRef.current = []
     allChunksRef.current = []
     startTimeRef.current = Date.now()
