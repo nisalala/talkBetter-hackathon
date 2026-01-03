@@ -124,7 +124,7 @@ export default function SetupPage({ params }) {
             <div>
               <div className="bg-gradient-to-br from-white/5 to-white/0 rounded-xl p-5 border border-white/10">
                 <p className="text-lg text-white leading-relaxed mb-4">
-                  "{currentQuestion.text}"
+                  {currentQuestion.text}
                 </p>
                 
                 <div className="flex items-center justify-between">

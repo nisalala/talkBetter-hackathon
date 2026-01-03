@@ -1,125 +1,154 @@
 // src/app/page.js
 
-import Link from 'next/link'
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
 import ModeSelector from '@/components/ModeSelector'
+import QuestionCard from '@/components/QuestionCard'
+import RecordingInterface from '@/components/RecordingInterface'
+import CustomQuestionInput from '@/components/CustomQuestionInput'
+import { modeQuestions } from '@/utils/modeQuestions'
+
+const DEFAULT_MODE = 'general'
 
 export default function Home() {
+  // State
+  const [selectedMode, setSelectedMode] = useState(DEFAULT_MODE)
+  const [currentQuestion, setCurrentQuestion] = useState(null)
+  const [usedQuestionIds, setUsedQuestionIds] = useState([])
+  const [isCustomMode, setIsCustomMode] = useState(false)
+  
+  // Check if it's free practice mode
+  const isFreePractice = selectedMode === 'general'
+  
+  // Get current mode data
+  const currentModeData = modeQuestions[selectedMode]
+
+  // Get a random question from available questions
+  const getRandomQuestion = useCallback((questions, excludeIds = []) => {
+    const availableQuestions = questions.filter(q => !excludeIds.includes(q.id))
+    
+    if (availableQuestions.length === 0) {
+      const randomIndex = Math.floor(Math.random() * questions.length)
+      return { question: questions[randomIndex], resetUsed: true }
+    }
+    
+    const randomIndex = Math.floor(Math.random() * availableQuestions.length)
+    return { question: availableQuestions[randomIndex], resetUsed: false }
+  }, [])
+
+  // Handle mode change
+  const handleModeChange = (modeId) => {
+    setSelectedMode(modeId)
+    setIsCustomMode(false)
+    
+    if (modeId !== 'general' && modeQuestions[modeId]) {
+      const { question } = getRandomQuestion(modeQuestions[modeId].questions, [])
+      setCurrentQuestion(question)
+      setUsedQuestionIds([question.id])
+    } else {
+      setCurrentQuestion(null)
+      setUsedQuestionIds([])
+    }
+  }
+
+  // Handle shuffle
+  const handleShuffle = () => {
+    if (!currentModeData || isFreePractice) return
+    
+    const { question, resetUsed } = getRandomQuestion(currentModeData.questions, usedQuestionIds)
+    
+    if (resetUsed) {
+      setUsedQuestionIds([question.id])
+    } else {
+      setUsedQuestionIds(prev => [...prev, question.id])
+    }
+    
+    setCurrentQuestion(question)
+    setIsCustomMode(false)
+  }
+
+  // Handle custom question
+  const handleCustomQuestion = (text) => {
+    setCurrentQuestion({
+      id: 'custom',
+      text: text,
+      duration: 60,
+      isCustom: true,
+      tips: [],
+    })
+    setIsCustomMode(true)
+  }
+
+  // Handle clear custom
+  const handleClearCustom = () => {
+    setIsCustomMode(false)
+    
+    if (!isFreePractice && currentModeData) {
+      const { question } = getRandomQuestion(currentModeData.questions, [])
+      setCurrentQuestion(question)
+      setUsedQuestionIds([question.id])
+    } else {
+      setCurrentQuestion(null)
+    }
+  }
+
+  // Initialize with random question if mode has questions
+  useEffect(() => {
+    if (currentModeData && !isFreePractice) {
+      const { question } = getRandomQuestion(currentModeData.questions, [])
+      setCurrentQuestion(question)
+      setUsedQuestionIds([question.id])
+    }
+  }, []) // Only on mount
+
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       {/* Hero Section */}
-      <div className="text-center mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">
-          <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Speak Better.
-          </span>
-          <br />
-          <span className="text-white">Communicate Confidently.</span>
-        </h1>
-        <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-          Record yourself speaking, get instant AI-powered feedback on clarity, 
-          confidence, and impact. Choose a mode to get started.
-        </p>
-      </div>
-
-      {/* ============================================ */}
-      {/* NEW: AI Conversation Feature - Hero Card    */}
-      {/* ============================================ */}
-      <div className="mb-12">
-        <Link
-          href="/conversation"
-          className="block glass rounded-2xl p-6 md:p-8 border-2 border-indigo-500/50 
-                   bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10
-                   hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-500/20
-                   transition-all group relative overflow-hidden"
-        >
-          {/* Background decoration */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 
-                        rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          
-          <div className="relative flex flex-col md:flex-row items-center gap-6">
-            {/* Icon */}
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 
-                          flex items-center justify-center text-4xl shadow-lg shadow-indigo-500/30
-                          group-hover:scale-110 transition-transform">
-              💬
-            </div>
-            
-            {/* Content */}
-            <div className="flex-1 text-center md:text-left">
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-2">
-                <h2 className="text-2xl font-bold text-white">AI Conversation Practice</h2>
-                <span className="px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 
-                               text-white text-xs font-bold uppercase tracking-wide animate-pulse">
-                  New
-                </span>
-              </div>
-              <p className="text-gray-400 mb-4">
-                Have real back-and-forth conversations with AI. Practice interviews, difficult talks, 
-                networking, and more with realistic responses that adapt to what you say.
-              </p>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-sm">
-                <div className="flex items-center gap-2 text-gray-300">
-                  <span className="text-indigo-400">✓</span> Real-time dialogue
-                </div>
-                <div className="flex items-center gap-2 text-gray-300">
-                  <span className="text-indigo-400">✓</span> AI adapts to you
-                </div>
-                <div className="flex items-center gap-2 text-gray-300">
-                  <span className="text-indigo-400">✓</span> Detailed analysis
-                </div>
-              </div>
-            </div>
-            
-            {/* Arrow */}
-            <div className="flex items-center gap-2 text-indigo-400 group-hover:text-white transition-colors">
-              <span className="hidden md:block font-medium">Try it now</span>
-              <svg 
-                className="w-6 h-6 group-hover:translate-x-1 transition-transform" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Divider */}
-      <div className="flex items-center gap-4 mb-8">
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        <span className="text-gray-500 text-sm font-medium">OR PRACTICE SOLO</span>
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-      </div>
-
-      {/* How it works */}
-      <div className="flex flex-wrap justify-center gap-8 mb-12">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">
-            1
-          </div>
-          <span className="text-gray-300">Choose a mode</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">
-            2
-          </div>
-          <span className="text-gray-300">Record yourself</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">
-            3
-          </div>
-          <span className="text-gray-300">Get AI feedback</span>
+      <div className="text-center mb-8">
+        <div className="text-[16px] font-semibold">
+          Record your voice. Improve clarity and confidence.
         </div>
       </div>
 
-      {/* Mode Selector */}
-      <ModeSelector />
+      {/* Mode Tabs */}
+      <ModeSelector 
+        selectedMode={selectedMode} 
+        onModeChange={handleModeChange} 
+      />
 
-      {/* Footer info */}
-      <div className="mt-12 text-center">
+      {/* Main Container */}
+      <div className="glass rounded-2xl p-6 md:p-8 mb-6">
+        
+        {/* Question Card */}
+        {currentQuestion && (
+          <QuestionCard
+            mode={selectedMode}
+            question={currentQuestion}
+            isCustom={isCustomMode}
+            onShuffle={!isFreePractice ? handleShuffle : null}
+            onClear={isCustomMode ? handleClearCustom : null}
+          />
+        )}
+
+        {/* Recording Interface with Live Feedback */}
+        <RecordingInterface 
+          mode={selectedMode}
+          question={currentQuestion}
+          isFreePractice={isFreePractice}
+        />
+      </div>
+
+      {/* Custom Question Input */}
+      {!isCustomMode && (
+        <CustomQuestionInput 
+          isFreePractice={isFreePractice}
+          onSubmit={handleCustomQuestion}
+        />
+      )}
+
+      {/* Footer */}
+      <div className="text-center">
         <p className="text-gray-500 text-sm">
           🔒 Your recordings are processed securely and never stored
         </p>
