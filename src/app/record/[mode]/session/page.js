@@ -1,10 +1,15 @@
+// src/app/record/[mode]/session/page.js
+
 'use client'
 
-import { useState, use, useEffect } from 'react'
+import { useState, use, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import useAudioRecorder from '@/hooks/useAudioRecorder'
+import useLiveFeedback from '@/hooks/useLiveFeedback'
 import Timer from '@/components/Timer'
 import RecordButton from '@/components/RecordButton'
+import LiveFeedback from '@/components/LiveFeedback'
+import LiveStats from '@/components/LiveStats'
 
 import { saveSession } from '@/lib/storage'
 import { useAuth } from '@/contexts/AuthContext'
@@ -16,6 +21,7 @@ export default function RecordingPage({ params }) {
   const [setup, setSetup] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStage, setProcessingStage] = useState('')
+  const [showLiveFeedback, setShowLiveFeedback] = useState(true)
 
   const { isAuthenticated } = useAuth()
   
@@ -33,6 +39,21 @@ export default function RecordingPage({ params }) {
     resetRecording,
   } = useAudioRecorder()
 
+  const {
+    currentFeedback,
+    dismissFeedback,
+    stats,
+    startFeedback,
+    stopFeedback,
+  } = useLiveFeedback({
+    targetDuration: setup?.question?.duration || 60,
+    isRecording,
+    currentDuration: duration,
+  })
+
+  // Track if live feedback has been started
+  const liveFeedbackActiveRef = useRef(false)
+
   // Load setup from sessionStorage
   useEffect(() => {
     const stored = sessionStorage.getItem('talkbetter_setup')
@@ -43,11 +64,45 @@ export default function RecordingPage({ params }) {
     setSetup(JSON.parse(stored))
   }, [mode, router])
 
+  // Handle live feedback start/stop
+  useEffect(() => {
+    const shouldRun = isRecording && showLiveFeedback && !isPaused
+
+    if (shouldRun && !liveFeedbackActiveRef.current) {
+      liveFeedbackActiveRef.current = true
+      startFeedback()
+    } else if (!shouldRun && liveFeedbackActiveRef.current) {
+      liveFeedbackActiveRef.current = false
+      stopFeedback()
+    }
+  }, [isRecording, isPaused, showLiveFeedback, startFeedback, stopFeedback])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (liveFeedbackActiveRef.current) {
+        stopFeedback()
+      }
+    }
+  }, [stopFeedback])
+
   const handleRestartRecording = () => {
+    liveFeedbackActiveRef.current = false
+    stopFeedback()
     resetRecording()
     setTimeout(() => {
       startRecording()
     }, 100)
+  }
+
+  const handleStartRecording = () => {
+    startRecording()
+  }
+
+  const handleStopRecording = () => {
+    liveFeedbackActiveRef.current = false
+    stopFeedback()
+    stopRecording()
   }
 
   const handleSubmit = async () => {
@@ -55,7 +110,6 @@ export default function RecordingPage({ params }) {
 
     setIsProcessing(true)
     try {
-      // Step 1: Transcribe
       setProcessingStage('Transcribing your audio...')
       const formData = new FormData()
       formData.append('audio', audioBlob, 'recording.webm')
@@ -71,7 +125,6 @@ export default function RecordingPage({ params }) {
       
       const { text: transcript } = await transcribeRes.json()
 
-      // Step 2: Analyze
       setProcessingStage('Analyzing your communication...')
       const analyzeRes = await fetch('/api/analyze', {
         method: 'POST',
@@ -91,7 +144,6 @@ export default function RecordingPage({ params }) {
       
       const analysis = await analyzeRes.json()
 
-      // Step 3: Create result object
       const result = {
         transcript,
         duration,
@@ -99,14 +151,13 @@ export default function RecordingPage({ params }) {
         difficulty: setup.difficulty,
         question: setup.question,
         analysis,
+        liveStats: stats,
       }
 
-      // Step 4: Save to user's history if logged in
       if (isAuthenticated) {
         saveSession(result)
       }
 
-      // Step 5: Save to sessionStorage for results page (temporary, for display)
       sessionStorage.setItem('talkbetter_results', JSON.stringify(result))
       
       router.push('/results')
@@ -153,16 +204,6 @@ export default function RecordingPage({ params }) {
               ← Back to Setup
             </button>
           </div>
-
-          <div className="mt-6 p-4 bg-white/5 rounded-xl text-left">
-            <p className="text-sm font-medium text-gray-300 mb-2">Troubleshooting:</p>
-            <ul className="text-sm text-gray-400 space-y-1">
-              <li>• Make sure you&apos;re using Chrome, Firefox, or Safari</li>
-              <li>• Check that your microphone is connected</li>
-              <li>• Allow microphone access when prompted</li>
-              <li>• Close other apps that might be using the microphone</li>
-            </ul>
-          </div>
         </div>
       </div>
     )
@@ -178,6 +219,9 @@ export default function RecordingPage({ params }) {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* Live Feedback Popup */}
+      <LiveFeedback feedback={currentFeedback} onDismiss={dismissFeedback} />
+
       {/* Progress indicator */}
       <div className="flex items-center justify-center gap-2 mb-8">
         <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white">
@@ -194,6 +238,23 @@ export default function RecordingPage({ params }) {
           3
         </div>
       </div>
+
+      {/* Live Feedback Toggle */}
+      {!audioBlob && (
+        <div className="flex justify-center mb-4">
+          <button
+            onClick={() => setShowLiveFeedback(!showLiveFeedback)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              showLiveFeedback
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                : 'bg-white/5 text-gray-400 border border-white/10'
+            }`}
+          >
+            <span>{showLiveFeedback ? '⚡' : '○'}</span>
+            Live Feedback {showLiveFeedback ? 'ON' : 'OFF'}
+          </button>
+        </div>
+      )}
 
       {/* Question Card */}
       <div className="glass rounded-2xl p-5 mb-6">
@@ -226,7 +287,7 @@ export default function RecordingPage({ params }) {
       </div>
 
       {/* Timer */}
-      <div className="flex justify-center mb-8">
+      <div className="flex justify-center mb-6">
         <Timer 
           seconds={duration} 
           isRecording={isRecording} 
@@ -234,6 +295,11 @@ export default function RecordingPage({ params }) {
           targetDuration={question?.duration}
         />
       </div>
+
+      {/* Live Stats (shown while recording) */}
+      {isRecording && showLiveFeedback && !isPaused && (
+        <LiveStats stats={stats} />
+      )}
 
       {/* Recording error (during recording) */}
       {error && (isRecording || audioBlob) && (
@@ -245,7 +311,6 @@ export default function RecordingPage({ params }) {
       {/* Controls */}
       <div className="flex flex-col items-center gap-6">
         {!audioBlob ? (
-          // Recording controls
           <>
             <div className="flex items-center gap-4">
               {isRecording && (
@@ -265,8 +330,8 @@ export default function RecordingPage({ params }) {
               <RecordButton
                 isRecording={isRecording}
                 isPaused={isPaused}
-                onStart={startRecording}
-                onStop={stopRecording}
+                onStart={handleStartRecording}
+                onStop={handleStopRecording}
                 onPause={pauseRecording}
                 onResume={resumeRecording}
               />
@@ -274,13 +339,12 @@ export default function RecordingPage({ params }) {
             
             <p className="text-gray-500 text-sm text-center">
               {isRecording 
-                ? 'Click the square to stop, or ↺ to restart' 
+                ? (showLiveFeedback ? '⚡ Live feedback active • Click square to stop' : 'Click the square to stop')
                 : 'Click the microphone to start recording'
               }
             </p>
           </>
         ) : (
-          // Review controls
           <div className="w-full glass rounded-2xl p-6">
             <h3 className="text-lg font-medium text-white mb-4">Review your recording</h3>
             
@@ -306,6 +370,28 @@ export default function RecordingPage({ params }) {
                 </span>
               )}
             </div>
+
+            {/* Live Stats Summary (after recording) */}
+            {showLiveFeedback && stats.wordCount > 0 && (
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="text-center p-2 rounded-lg bg-white/5">
+                  <div className="text-lg font-bold text-white">{stats.wordCount}</div>
+                  <div className="text-xs text-gray-400">Words</div>
+                </div>
+                <div className="text-center p-2 rounded-lg bg-white/5">
+                  <div className={`text-lg font-bold ${
+                    stats.wpm >= 120 && stats.wpm <= 150 ? 'text-green-400' : 'text-yellow-400'
+                  }`}>{stats.wpm}</div>
+                  <div className="text-xs text-gray-400">WPM</div>
+                </div>
+                <div className="text-center p-2 rounded-lg bg-white/5">
+                  <div className={`text-lg font-bold ${
+                    stats.fillerCount === 0 ? 'text-green-400' : 'text-yellow-400'
+                  }`}>{stats.fillerCount}</div>
+                  <div className="text-xs text-gray-400">Fillers</div>
+                </div>
+              </div>
+            )}
             
             {/* Audio player */}
             <audio 
