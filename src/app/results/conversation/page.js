@@ -53,6 +53,20 @@ export default function ConversationResultsPage() {
 
   const { messages = [], scenario = {}, analysis = {}, duration = 0 } = results
 
+  // ============================================
+  // 🎯 CONTEXT-AWARE: Check relevance
+  // ============================================
+  const relevanceScore = analysis.relevanceScore ?? 100
+  const isOffTopic = relevanceScore <= 20
+  const isSomewhatOffTopic = relevanceScore > 20 && relevanceScore <= 50
+
+  // Apply zero scores if completely off-topic
+  const displayScores = isOffTopic 
+    ? Object.fromEntries(Object.keys(analysis.scores || {}).map(key => [key, 0]))
+    : analysis.scores || {}
+
+  const displayOverallScore = isOffTopic ? 0 : (analysis.overallScore || 0)
+
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -64,6 +78,15 @@ export default function ConversationResultsPage() {
     if (score >= 60) return 'text-yellow-400'
     return 'text-red-400'
   }
+
+  const getRelevanceColor = (score) => {
+    if (score <= 20) return { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30' }
+    if (score <= 50) return { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' }
+    if (score <= 75) return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' }
+    return { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30' }
+  }
+
+  const relevanceStyle = getRelevanceColor(relevanceScore)
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -81,19 +104,95 @@ export default function ConversationResultsPage() {
         </div>
       </div>
 
+      {/* ============================================ */}
+      {/* 🎯 RELEVANCE SCORE DISPLAY                  */}
+      {/* ============================================ */}
+      {analysis.relevanceScore !== undefined && (
+        <div className={`glass rounded-2xl p-6 mb-8 border-2 ${relevanceStyle.border} ${relevanceStyle.bg}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="text-4xl">
+                {isOffTopic ? '🚫' : isSomewhatOffTopic ? '⚠️' : '✅'}
+              </div>
+              <div>
+                <h3 className={`text-lg font-semibold ${relevanceStyle.text}`}>
+                  {isOffTopic ? 'Off-Topic Conversation' : 
+                   isSomewhatOffTopic ? 'Partially On Topic' : 
+                   'Great Conversation Flow'}
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  {isOffTopic 
+                    ? 'Your responses didn\'t match the scenario. All scores set to 0.'
+                    : isSomewhatOffTopic
+                    ? 'Some responses went off-topic from the scenario.'
+                    : 'You stayed engaged with the scenario!'}
+                </p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className={`text-3xl font-bold ${relevanceStyle.text}`}>
+                {relevanceScore}
+              </div>
+              <div className="text-xs text-gray-500">Relevance</div>
+            </div>
+          </div>
+          
+          {analysis.relevanceIssue && (
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <p className="text-gray-300 text-sm">{analysis.relevanceIssue}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* ⚠️ OFF-TOPIC WARNING                        */}
+      {/* ============================================ */}
+      {isOffTopic && (
+        <div className="glass rounded-2xl p-6 mb-8 border-2 border-red-500/50 bg-gradient-to-r from-red-500/20 to-orange-500/20">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl flex-shrink-0 animate-pulse">🚨</div>
+            <div>
+              <h3 className="text-xl font-bold text-red-400 mb-2">
+                Scores Set to Zero
+              </h3>
+              <p className="text-gray-300 mb-4">
+                Your conversation went completely off-topic from the &quot;{scenario.name}&quot; scenario 
+                (relevance: {relevanceScore}/100). All scores have been zeroed.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1.5 rounded-full bg-red-500/20 text-red-400 text-sm font-medium">
+                  💡 Stay in character
+                </span>
+                <span className="px-3 py-1.5 rounded-full bg-red-500/20 text-red-400 text-sm font-medium">
+                  🎯 Respond to the scenario context
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Overall Score */}
-      <div className="glass rounded-2xl p-8 mb-8">
+      <div className={`glass rounded-2xl p-8 mb-8 ${isOffTopic ? 'opacity-60' : ''}`}>
         <div className="flex flex-col md:flex-row items-center justify-center gap-8">
-          <ScoreDisplay
-            score={analysis.overallScore || 0}
-            label="Overall Performance"
-            size="large"
-          />
+          <div className="relative">
+            <ScoreDisplay
+              score={displayOverallScore}
+              label="Overall Performance"
+              size="large"
+            />
+            {isOffTopic && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-6xl opacity-30">🚫</span>
+              </div>
+            )}
+          </div>
 
           {/* Individual scores */}
-          {analysis.scores && (
+          {displayScores && Object.keys(displayScores).length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {Object.entries(analysis.scores).map(([key, value]) => (
+              {Object.entries(displayScores).map(([key, value]) => (
                 <div key={key} className="text-center">
                   <div className={`text-2xl font-bold ${getScoreColor(value)}`}>
                     {value}
@@ -106,121 +205,159 @@ export default function ConversationResultsPage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Overall Feedback */}
-      {analysis.overallFeedback && (
-        <div className="glass rounded-2xl p-6 mb-8">
-          <div className="flex items-start gap-4">
-            <div className="text-3xl">💡</div>
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">Summary</h3>
-              <p className="text-gray-300">{analysis.overallFeedback}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Recommended Focus */}
-      {analysis.recommendedFocus && (
-        <div className="glass rounded-2xl p-6 mb-8 border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
-          <div className="flex items-start gap-4">
-            <div className="text-3xl">🎯</div>
-            <div>
-              <h3 className="text-lg font-semibold text-indigo-400 mb-2">Focus Area</h3>
-              <p className="text-white">{analysis.recommendedFocus}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Conversation Flow & Question Handling */}
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
-        {analysis.conversationFlow && (
-          <div className="glass rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Conversation Flow</h3>
-              <span className={`text-2xl font-bold ${getScoreColor(analysis.conversationFlow.score)}`}>
-                {analysis.conversationFlow.score}
-              </span>
-            </div>
-            <p className="text-gray-400 text-sm">{analysis.conversationFlow.feedback}</p>
-          </div>
-        )}
-
-        {analysis.questionHandling && (
-          <div className="glass rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Question Handling</h3>
-              <span className={`text-2xl font-bold ${getScoreColor(analysis.questionHandling.score)}`}>
-                {analysis.questionHandling.score}
-              </span>
-            </div>
-            <p className="text-gray-400 text-sm">{analysis.questionHandling.feedback}</p>
-          </div>
+        
+        {isOffTopic && (
+          <p className="text-center text-gray-500 text-sm mt-4">
+            Scores shown as 0 due to off-topic responses
+          </p>
         )}
       </div>
 
-      {/* Strengths & Improvements */}
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
-        {analysis.strengths && analysis.strengths.length > 0 && (
-          <div className="glass rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-green-400 mb-4 flex items-center gap-2">
-              <span>✅</span> What You Did Well
-            </h3>
-            <ul className="space-y-3">
-              {analysis.strengths.map((strength, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="text-green-400 mt-1">•</span>
-                  <span className="text-gray-300 text-sm">{strength}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {analysis.improvements && analysis.improvements.length > 0 && (
-          <div className="glass rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-yellow-400 mb-4 flex items-center gap-2">
-              <span>📈</span> Areas to Improve
-            </h3>
-            <ul className="space-y-3">
-              {analysis.improvements.map((improvement, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="text-yellow-400 mt-1">•</span>
-                  <span className="text-gray-300 text-sm">{improvement}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {/* Key Moments */}
-      {analysis.keyMoments && analysis.keyMoments.length > 0 && (
-        <div className="glass rounded-2xl p-6 mb-8">
-          <h3 className="text-lg font-semibold text-white mb-4">🔑 Key Moments</h3>
-          <div className="space-y-4">
-            {analysis.keyMoments.map((moment, i) => (
-              <div
-                key={i}
-                className={`p-4 rounded-xl ${
-                  moment.type === 'strength'
-                    ? 'bg-green-500/10 border border-green-500/20'
-                    : 'bg-yellow-500/10 border border-yellow-500/20'
-                }`}
-              >
-                <p className="text-white text-sm mb-2 italic">&ldquo;{moment.quote}&rdquo;</p>
-                <p className={`text-sm ${moment.type === 'strength' ? 'text-green-400' : 'text-yellow-400'}`}>
-                  {moment.feedback}
-                </p>
+      {/* Only show detailed feedback if NOT off-topic */}
+      {!isOffTopic && (
+        <>
+          {/* Overall Feedback */}
+          {analysis.overallFeedback && (
+            <div className="glass rounded-2xl p-6 mb-8">
+              <div className="flex items-start gap-4">
+                <div className="text-3xl">💡</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Summary</h3>
+                  <p className="text-gray-300">{analysis.overallFeedback}</p>
+                </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Recommended Focus */}
+          {analysis.recommendedFocus && (
+            <div className="glass rounded-2xl p-6 mb-8 border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
+              <div className="flex items-start gap-4">
+                <div className="text-3xl">🎯</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-indigo-400 mb-2">Focus Area</h3>
+                  <p className="text-white">{analysis.recommendedFocus}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conversation Flow & Question Handling */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            {analysis.conversationFlow && (
+              <div className="glass rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white">Conversation Flow</h3>
+                  <span className={`text-2xl font-bold ${getScoreColor(analysis.conversationFlow.score)}`}>
+                    {analysis.conversationFlow.score}
+                  </span>
+                </div>
+                <p className="text-gray-400 text-sm">{analysis.conversationFlow.feedback}</p>
+              </div>
+            )}
+
+            {analysis.questionHandling && (
+              <div className="glass rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white">Question Handling</h3>
+                  <span className={`text-2xl font-bold ${getScoreColor(analysis.questionHandling.score)}`}>
+                    {analysis.questionHandling.score}
+                  </span>
+                </div>
+                <p className="text-gray-400 text-sm">{analysis.questionHandling.feedback}</p>
+              </div>
+            )}
           </div>
+
+          {/* Strengths & Improvements */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            {analysis.strengths && analysis.strengths.length > 0 && (
+              <div className="glass rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-green-400 mb-4 flex items-center gap-2">
+                  <span>✅</span> What You Did Well
+                </h3>
+                <ul className="space-y-3">
+                  {analysis.strengths.map((strength, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <span className="text-green-400 mt-1">•</span>
+                      <span className="text-gray-300 text-sm">{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {analysis.improvements && analysis.improvements.length > 0 && (
+              <div className="glass rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-yellow-400 mb-4 flex items-center gap-2">
+                  <span>📈</span> Areas to Improve
+                </h3>
+                <ul className="space-y-3">
+                  {analysis.improvements.map((improvement, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <span className="text-yellow-400 mt-1">•</span>
+                      <span className="text-gray-300 text-sm">{improvement}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Key Moments */}
+          {analysis.keyMoments && analysis.keyMoments.length > 0 && (
+            <div className="glass rounded-2xl p-6 mb-8">
+              <h3 className="text-lg font-semibold text-white mb-4">🔑 Key Moments</h3>
+              <div className="space-y-4">
+                {analysis.keyMoments.map((moment, i) => (
+                  <div
+                    key={i}
+                    className={`p-4 rounded-xl ${
+                      moment.type === 'strength'
+                        ? 'bg-green-500/10 border border-green-500/20'
+                        : 'bg-yellow-500/10 border border-yellow-500/20'
+                    }`}
+                  >
+                    <p className="text-white text-sm mb-2 italic">&ldquo;{moment.quote}&rdquo;</p>
+                    <p className={`text-sm ${moment.type === 'strength' ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {moment.feedback}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Off-topic specific tips */}
+      {isOffTopic && (
+        <div className="glass rounded-2xl p-6 mb-8">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <span>📝</span> Tips for Staying On Topic
+          </h3>
+          <ul className="space-y-3">
+            <li className="flex items-start gap-3">
+              <span className="text-yellow-400 mt-1">1.</span>
+              <span className="text-gray-300">Read the scenario description before starting</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="text-yellow-400 mt-1">2.</span>
+              <span className="text-gray-300">Respond to what the AI says, don&apos;t change the subject</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="text-yellow-400 mt-1">3.</span>
+              <span className="text-gray-300">Stay in character for the scenario type</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="text-yellow-400 mt-1">4.</span>
+              <span className="text-gray-300">If asked a question, answer it before adding new topics</span>
+            </li>
+          </ul>
         </div>
       )}
 
-      {/* Quick Stats */}
+      {/* Quick Stats - Always show */}
       {analysis.metrics && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="glass rounded-xl p-4 text-center">

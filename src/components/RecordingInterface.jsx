@@ -1,16 +1,19 @@
 // src/components/RecordingInterface.jsx
 
-"use client";
+'use client'
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import useAudioRecorder from "@/hooks/useAudioRecorder";
-import Timer from "@/components/Timer";
-import RecordButton from "@/components/RecordButton";
-import { saveSession } from "@/lib/storage";
-import { useAuth } from "@/contexts/AuthContext";
-import { modeQuestions } from "@/utils/modeQuestions";
-import { getModeDescription } from "@/utils/modeConfig";
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import useAudioRecorder from '@/hooks/useAudioRecorder'
+import useLiveFeedback from '@/hooks/useLiveFeedback'
+import Timer from '@/components/Timer'
+import RecordButton from '@/components/RecordButton'
+import LiveFeedback from '@/components/LiveFeedback'
+import LiveStats from '@/components/LiveStats'
+import { saveSession } from '@/lib/storage'
+import { useAuth } from '@/contexts/AuthContext'
+import { modeQuestions } from '@/utils/modeQuestions'
+import { getModeDescription } from '@/utils/modeConfig'
 
 export default function RecordingInterface({
   mode,
@@ -20,15 +23,16 @@ export default function RecordingInterface({
   onShuffle,
   onClearCustom,
 }) {
-  const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const router = useRouter()
+  const { isAuthenticated } = useAuth()
 
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStage, setProcessingStage] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processingStage, setProcessingStage] = useState('')
+  const [showLiveFeedback, setShowLiveFeedback] = useState(true)
 
   // Get mode data
-  const modeData = modeQuestions[mode];
-  const modeDescription = getModeDescription(mode);
+  const modeData = modeQuestions[mode]
+  const modeDescription = getModeDescription(mode)
 
   // Recording hook
   const {
@@ -43,89 +47,132 @@ export default function RecordingInterface({
     pauseRecording,
     resumeRecording,
     resetRecording,
-  } = useAudioRecorder();
+  } = useAudioRecorder()
+
+  // Live feedback hook
+  const {
+    currentFeedback,
+    dismissFeedback,
+    stats,
+    startFeedback,
+    stopFeedback,
+  } = useLiveFeedback({
+    targetDuration: question?.duration || 60,
+    isRecording,
+    currentDuration: duration,
+  })
+
+  // Track live feedback state with ref to prevent infinite loops
+  const liveFeedbackActiveRef = useRef(false)
+
+  // Handle live feedback start/stop
+  useEffect(() => {
+    const shouldRun = isRecording && showLiveFeedback && !isPaused
+
+    if (shouldRun && !liveFeedbackActiveRef.current) {
+      liveFeedbackActiveRef.current = true
+      startFeedback()
+    } else if (!shouldRun && liveFeedbackActiveRef.current) {
+      liveFeedbackActiveRef.current = false
+      stopFeedback()
+    }
+  }, [isRecording, isPaused, showLiveFeedback, startFeedback, stopFeedback])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (liveFeedbackActiveRef.current) {
+        stopFeedback()
+      }
+    }
+  }, [stopFeedback])
 
   const handleStartRecording = () => {
-    startRecording();
-  };
+    startRecording()
+  }
 
   const handleStopRecording = () => {
-    stopRecording();
-  };
+    liveFeedbackActiveRef.current = false
+    stopFeedback()
+    stopRecording()
+  }
 
   const handleRestartRecording = () => {
-    resetRecording();
+    liveFeedbackActiveRef.current = false
+    stopFeedback()
+    resetRecording()
     setTimeout(() => {
-      startRecording();
-    }, 100);
-  };
+      startRecording()
+    }, 100)
+  }
 
   const handleSubmit = async () => {
-    if (!audioBlob) return;
+    if (!audioBlob) return
 
     const questionData = question || {
-      text: "Free practice session",
+      text: 'Free practice session',
       duration: null,
       isCustom: true,
-    };
+    }
 
-    setIsProcessing(true);
+    setIsProcessing(true)
     try {
-      setProcessingStage("Transcribing your audio...");
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "recording.webm");
+      setProcessingStage('Transcribing your audio...')
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.webm')
 
-      const transcribeRes = await fetch("/api/transcribe", {
-        method: "POST",
+      const transcribeRes = await fetch('/api/transcribe', {
+        method: 'POST',
         body: formData,
-      });
+      })
 
       if (!transcribeRes.ok) {
-        throw new Error("Transcription failed");
+        throw new Error('Transcription failed')
       }
 
-      const { text: transcript } = await transcribeRes.json();
+      const { text: transcript } = await transcribeRes.json()
 
-      setProcessingStage("Analyzing your communication...");
-      const analyzeRes = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      setProcessingStage('Analyzing your communication...')
+      const analyzeRes = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcript,
           duration,
-          mode: mode || "general",
+          mode: mode || 'general',
           question: questionData,
         }),
-      });
+      })
 
       if (!analyzeRes.ok) {
-        throw new Error("Analysis failed");
+        throw new Error('Analysis failed')
       }
 
-      const analysis = await analyzeRes.json();
+      const analysis = await analyzeRes.json()
 
       const result = {
         transcript,
         duration,
-        mode: mode || "general",
+        mode: mode || 'general',
         question: questionData,
         analysis,
-      };
-
-      if (isAuthenticated) {
-        saveSession(result);
+        liveStats: stats, // Include live stats in results
       }
 
-      sessionStorage.setItem("talkbetter_results", JSON.stringify(result));
-      router.push("/results");
+      if (isAuthenticated) {
+        saveSession(result)
+      }
+
+      sessionStorage.setItem('talkbetter_results', JSON.stringify(result))
+      router.push('/results')
     } catch (err) {
-      console.error("Processing error:", err);
-      alert("Something went wrong. Please try again.");
+      console.error('Processing error:', err)
+      alert('Something went wrong. Please try again.')
     } finally {
-      setIsProcessing(false);
-      setProcessingStage("");
+      setIsProcessing(false)
+      setProcessingStage('')
     }
-  };
+  }
 
   // Microphone Error State
   if (error && !isRecording && !audioBlob) {
@@ -156,13 +203,16 @@ export default function RecordingInterface({
           </ul>
         </div>
       </div>
-    );
+    )
   }
 
   // Review Recording State
   if (audioBlob) {
     return (
       <div className="animate-fadeIn">
+        {/* Live Feedback Popup (can still show during review) */}
+        <LiveFeedback feedback={currentFeedback} onDismiss={dismissFeedback} />
+
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-lg font-medium text-white">
             Review Your Recording
@@ -170,29 +220,51 @@ export default function RecordingInterface({
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-white/10 text-sm text-gray-300">
               ⏱️ {Math.floor(duration / 60)}:
-              {(duration % 60).toString().padStart(2, "0")}
+              {(duration % 60).toString().padStart(2, '0')}
             </span>
             {question?.duration && (
               <span
                 className={`px-3 py-1 rounded-full text-sm ${
                   duration >= question.duration * 0.8 &&
                   duration <= question.duration * 1.2
-                    ? "bg-green-500/20 text-green-400"
+                    ? 'bg-green-500/20 text-green-400'
                     : duration < question.duration * 0.8
-                    ? "bg-yellow-500/20 text-yellow-400"
-                    : "bg-orange-500/20 text-orange-400"
+                    ? 'bg-yellow-500/20 text-yellow-400'
+                    : 'bg-orange-500/20 text-orange-400'
                 }`}
               >
                 {duration >= question.duration * 0.8 &&
                 duration <= question.duration * 1.2
-                  ? "✓ Good length"
+                  ? '✓ Good length'
                   : duration < question.duration * 0.8
-                  ? "↓ A bit short"
-                  : "↑ A bit long"}
+                  ? '↓ A bit short'
+                  : '↑ A bit long'}
               </span>
             )}
           </div>
         </div>
+
+        {/* Live Stats Summary (if we have data) */}
+        {showLiveFeedback && stats.wordCount > 0 && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="text-center p-2 rounded-lg bg-white/5">
+              <div className="text-lg font-bold text-white">{stats.wordCount}</div>
+              <div className="text-xs text-gray-400">Words</div>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-white/5">
+              <div className={`text-lg font-bold ${
+                stats.wpm >= 120 && stats.wpm <= 150 ? 'text-green-400' : 'text-yellow-400'
+              }`}>{stats.wpm}</div>
+              <div className="text-xs text-gray-400">WPM</div>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-white/5">
+              <div className={`text-lg font-bold ${
+                stats.fillerCount === 0 ? 'text-green-400' : 'text-yellow-400'
+              }`}>{stats.fillerCount}</div>
+              <div className="text-xs text-gray-400">Fillers</div>
+            </div>
+          </div>
+        )}
 
         {/* Audio player */}
         <audio src={audioUrl} controls className="w-full mb-6 rounded-lg" />
@@ -274,12 +346,31 @@ export default function RecordingInterface({
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   // Active Recording State
   return (
-    <div className="text-center">
+    <div className="text-center relative">
+      {/* Live Feedback Toast - positioned fixed */}
+      <LiveFeedback feedback={currentFeedback} onDismiss={dismissFeedback} />
+
+      {/* Live Feedback Toggle - top right */}
+      <div className="absolute top-0 right-0 z-10">
+        <button
+          onClick={() => setShowLiveFeedback(!showLiveFeedback)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            showLiveFeedback
+              ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+              : 'bg-white/5 text-gray-400 border border-white/10'
+          }`}
+          title={showLiveFeedback ? 'Disable live feedback' : 'Enable live feedback'}
+        >
+          <span className={`w-2 h-2 rounded-full ${showLiveFeedback ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`} />
+          Live Coach {showLiveFeedback ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
       {/* Mode Header - Show for non-free-practice modes */}
       {!isFreePractice && modeData && (
         <div className="flex items-center justify-center gap-2 mb-2">
@@ -305,17 +396,17 @@ export default function RecordingInterface({
       {question && (
         <div className="mb-2">
           <div className="p-4 flex justify-center">
-            <div className="flex gap-10 items-center ">
+            <div className="flex gap-10 items-center">
               {/* Prompt Label with Controls */}
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     isCustom
-                      ? "bg-purple-500/20 text-purple-400"
-                      : "bg-indigo-500/20 text-indigo-400"
+                      ? 'bg-purple-500/20 text-purple-400'
+                      : 'bg-indigo-500/20 text-indigo-400'
                   }`}
                 >
-                  {isCustom ? "✏️ Custom" : "💡 Prompt"}
+                  {isCustom ? '✏️ Custom' : '💡 Prompt'}
                 </span>
 
                 {/* Shuffle button (only for non-custom, non-free-practice) */}
@@ -347,7 +438,7 @@ export default function RecordingInterface({
                   <button
                     onClick={onClearCustom}
                     className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-gray-400 hover:text-white transition-all"
-                    title={isFreePractice ? "Clear prompt" : "Back to prompts"}
+                    title={isFreePractice ? 'Clear prompt' : 'Back to prompts'}
                   >
                     <svg
                       className="w-4 h-4"
@@ -370,22 +461,21 @@ export default function RecordingInterface({
               <p className="text-white text-lg leading-relaxed text-center">
                 &quot;{question.text}&quot;
               </p>
-            
 
-            {/* Duration badge */}
-            {question.duration && (
-              <div className="flex text-center px-4 py-3 bg-white/5 rounded-xl">
-                <div className="text-2xl font-bold text-indigo-400">
-                  {question.duration < 60
-                    ? question.duration
-                    : Math.floor(question.duration / 60)}
+              {/* Duration badge */}
+              {question.duration && (
+                <div className="flex text-center px-4 py-3 bg-white/5 rounded-xl">
+                  <div className="text-2xl font-bold text-indigo-400">
+                    {question.duration < 60
+                      ? question.duration
+                      : Math.floor(question.duration / 60)}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {question.duration < 60 ? 'sec' : 'min'}
+                  </div>
                 </div>
-                <div className="text-xs text-gray-400">
-                  {question.duration < 60 ? "sec" : "min"}
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -395,6 +485,11 @@ export default function RecordingInterface({
         <p className="text-gray-400 text-sm mb-4">
           Speak naturally and clearly
         </p>
+      )}
+
+      {/* Live Stats - Show while recording */}
+      {isRecording && !isPaused && showLiveFeedback && (
+        <LiveStats stats={stats} />
       )}
 
       {/* Timer */}
@@ -414,7 +509,7 @@ export default function RecordingInterface({
             onClick={handleRestartRecording}
             className="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 
                      transition-all flex items-center justify-center
-                     hover:scale-105 active:scale-95"
+                     hover:scale-105 active:scale-95 flex-shrink-0"
             title="Restart recording"
           >
             <svg
@@ -446,9 +541,11 @@ export default function RecordingInterface({
       <p className="text-gray-500 text-sm">
         {isRecording
           ? isPaused
-            ? "Paused - Click to resume"
-            : "Click the square to stop"
-          : "Click the microphone to start recording"}
+            ? 'Paused - Click to resume'
+            : showLiveFeedback 
+              ? '⚡ Live feedback active • Click square to stop'
+              : 'Click the square to stop'
+          : 'Click the microphone to start recording'}
       </p>
 
       {/* Recording error during recording */}
@@ -458,5 +555,5 @@ export default function RecordingInterface({
         </div>
       )}
     </div>
-  );
+  )
 }

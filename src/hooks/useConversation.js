@@ -1,6 +1,6 @@
 // src/hooks/useConversation.js
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 export default function useConversation(scenario, maxTurns = 7) {
   const [messages, setMessages] = useState([])
@@ -10,108 +10,238 @@ export default function useConversation(scenario, maxTurns = 7) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [conversationEnded, setConversationEnded] = useState(false)
   const [error, setError] = useState(null)
-  
+
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
-  const speechSynthRef = useRef(null)
+  const streamRef = useRef(null)
+  const audioRef = useRef(null)
+  const abortControllerRef = useRef(null)
 
-  // Initialize conversation with AI's opening line
-  const startConversation = useCallback(() => {
-    const openingMessage = {
-      id: Date.now(),
-      role: 'ai',
-      text: scenario.openingLine,
-      timestamp: Date.now(),
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      stopAllAudio()
+      cleanupRecording()
     }
-    setMessages([openingMessage])
-    setCurrentTurn(1)
-    
-    // Speak the opening line
-    speakText(scenario.openingLine)
-  }, [scenario])
+  }, [])
 
-  // Text-to-Speech for AI responses
-  const speakText = useCallback((text) => {
-    if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel()
-      
-      const utterance = new SpeechSynthesisUtterance(text)
-      
-      // Get voices and select a good one
-      const setVoice = () => {
-        const voices = window.speechSynthesis.getVoices()
-        const preferredVoice = voices.find(v =>
-          v.name.includes('Google US English') ||
-          v.name.includes('Samantha') ||
-          v.name.includes('Microsoft Zira') ||
-          (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
-        ) || voices.find(v => v.lang.startsWith('en')) || voices[0]
+  const stopAllAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+    setIsAISpeaking(false)
+  }, [])
+
+  const cleanupRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop()
+      } catch (e) {
+        // Ignore
+      }
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    mediaRecorderRef.current = null
+    audioChunksRef.current = []
+  }, [])
+
+  // Get AI response based on conversation context
+  const getAIResponse = useCallback(async (userMessage = null) => {
+    // Safety check for scenario
+    if (!scenario) {
+      console.error('No scenario provided')
+      setError('No scenario selected')
+      return null
+    }
+
+    setIsProcessing(true)
+    setError(null)
+
+    try {
+      // Build conversation history
+      const conversationHistory = messages.map(m => ({
+        role: m.role === 'ai' ? 'assistant' : 'user',
+        content: m.text,
+      }))
+
+      // Add user's new message if provided
+      if (userMessage) {
+        conversationHistory.push({
+          role: 'user',
+          content: userMessage,
+        })
+      }
+
+      const response = await fetch('/api/conversation/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario: {
+            id: scenario.id,
+            name: scenario.name,
+            description: scenario.description,
+            aiRole: scenario.aiRole || 'conversation partner',
+            context: scenario.context || scenario.description,
+            openingLine: scenario.openingLine,
+          },
+          conversationHistory,
+          currentTurn: currentTurn + 1,
+          maxTurns,
+          isOpening: conversationHistory.length === 0,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        console.error('API error:', errorData)
+        throw new Error('Failed to get AI response')
+      }
+
+      const data = await response.json()
+      return data.response
+
+    } catch (err) {
+      console.error('AI response error:', err)
+      setError('Failed to get AI response. Please try again.')
+      return null
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [scenario, messages, currentTurn, maxTurns])
+
+  // Speak AI message using browser TTS
+  const speakAIMessage = useCallback(async (text) => {
+    setIsAISpeaking(true)
+
+    return new Promise((resolve) => {
+      // Use browser's speech synthesis
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.rate = 1.0
+        utterance.pitch = 1.0
+        
+        // Get a good voice
+        const voices = speechSynthesis.getVoices()
+        const preferredVoice = voices.find(v => 
+          v.name.includes('Google') || 
+          v.name.includes('Samantha') || 
+          v.name.includes('Daniel')
+        ) || voices[0]
         
         if (preferredVoice) {
           utterance.voice = preferredVoice
         }
-      }
 
-      if (window.speechSynthesis.getVoices().length > 0) {
-        setVoice()
+        utterance.onend = () => {
+          setIsAISpeaking(false)
+          resolve()
+        }
+
+        utterance.onerror = () => {
+          setIsAISpeaking(false)
+          resolve()
+        }
+
+        // Store reference for stopping
+        audioRef.current = { 
+          pause: () => speechSynthesis.cancel(),
+          currentTime: 0 
+        }
+
+        speechSynthesis.speak(utterance)
       } else {
-        window.speechSynthesis.onvoiceschanged = setVoice
+        // Fallback: just wait a bit
+        setTimeout(() => {
+          setIsAISpeaking(false)
+          resolve()
+        }, 2000)
       }
-
-      utterance.rate = 0.95
-      utterance.pitch = 1.0
-      utterance.volume = 1
-
-      utterance.onstart = () => setIsAISpeaking(true)
-      utterance.onend = () => setIsAISpeaking(false)
-      utterance.onerror = () => setIsAISpeaking(false)
-
-      speechSynthRef.current = utterance
-      window.speechSynthesis.speak(utterance)
-    }
+    })
   }, [])
 
-  // Stop AI from speaking
-  const stopAISpeaking = useCallback(() => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      setIsAISpeaking(false)
+  // Add message to conversation
+  const addMessage = useCallback((role, text) => {
+    const newMessage = {
+      id: `${role}-${Date.now()}`,
+      role,
+      text,
+      timestamp: Date.now(),
     }
+    setMessages(prev => [...prev, newMessage])
+    return newMessage
   }, [])
+
+  // Start the conversation (AI speaks first)
+  const startConversation = useCallback(async () => {
+    if (!scenario) {
+      setError('No scenario selected')
+      return
+    }
+
+    setError(null)
+    setMessages([])
+    setCurrentTurn(0)
+    setConversationEnded(false)
+
+    // Get AI's opening line
+    const aiResponse = scenario.openingLine || await getAIResponse()
+    
+    if (aiResponse) {
+      addMessage('ai', aiResponse)
+      setCurrentTurn(1)
+      await speakAIMessage(aiResponse)
+    }
+  }, [scenario, getAIResponse, addMessage, speakAIMessage])
 
   // Start recording user's response
   const startRecording = useCallback(async () => {
+    if (isAISpeaking || isProcessing || conversationEnded) return
+
+    setError(null)
+    audioChunksRef.current = []
+
     try {
-      // Stop AI if still speaking
-      stopAISpeaking()
-      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      })
-      
-      audioChunksRef.current = []
-      
+      streamRef.current = stream
+
+      // Determine mime type
+      let mimeType = 'audio/webm'
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4'
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg'
+        }
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = mediaRecorder
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data)
         }
       }
-      
-      mediaRecorderRef.current = mediaRecorder
-      mediaRecorder.start()
-      setIsUserSpeaking(true)
-      setError(null)
-    } catch (err) {
-      setError('Could not access microphone. Please allow microphone access.')
-      console.error('Recording error:', err)
-    }
-  }, [stopAISpeaking])
 
-  // Stop recording and process user's response
+      mediaRecorder.start(100) // Collect data every 100ms
+      setIsUserSpeaking(true)
+
+    } catch (err) {
+      console.error('Recording error:', err)
+      setError('Could not access microphone. Please check permissions.')
+    }
+  }, [isAISpeaking, isProcessing, conversationEnded])
+
+  // Stop recording and process
   const stopRecording = useCallback(async () => {
-    if (!mediaRecorderRef.current) return
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+      return
+    }
 
     return new Promise((resolve) => {
       mediaRecorderRef.current.onstop = async () => {
@@ -120,116 +250,118 @@ export default function useConversation(scenario, maxTurns = 7) {
 
         try {
           // Create audio blob
-          const audioBlob = new Blob(audioChunksRef.current, { 
-            type: mediaRecorderRef.current.mimeType 
-          })
+          const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm'
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
 
-          // Transcribe user's audio
+          // Check if we have enough audio
+          if (audioBlob.size < 1000) {
+            setError('Recording too short. Please try again.')
+            setIsProcessing(false)
+            resolve()
+            return
+          }
+
+          // Transcribe the audio
           const formData = new FormData()
-          formData.append('audio', audioBlob, 'response.webm')
+          const extension = mimeType.includes('webm') ? 'webm' : 
+                           mimeType.includes('mp4') ? 'mp4' : 'ogg'
+          formData.append('audio', audioBlob, `recording.${extension}`)
 
-          const transcribeRes = await fetch('/api/transcribe', {
+          const transcribeResponse = await fetch('/api/transcribe', {
             method: 'POST',
             body: formData,
           })
 
-          if (!transcribeRes.ok) throw new Error('Transcription failed')
-
-          const { text: userText } = await transcribeRes.json()
-
-          // Add user message
-          const userMessage = {
-            id: Date.now(),
-            role: 'user',
-            text: userText,
-            timestamp: Date.now(),
+          if (!transcribeResponse.ok) {
+            throw new Error('Transcription failed')
           }
-          
-          setMessages(prev => [...prev, userMessage])
 
-          // Check if we've reached max turns
-          if (currentTurn >= maxTurns) {
-            setConversationEnded(true)
+          const { text: userTranscript } = await transcribeResponse.json()
+
+          if (!userTranscript || userTranscript.trim().length === 0) {
+            setError('Could not understand audio. Please try again.')
             setIsProcessing(false)
-            resolve(userText)
+            resolve()
             return
           }
 
-          // Get AI's response
-          const aiResponse = await getAIResponse([...messages, userMessage])
-          
-          // Add AI message
-          const aiMessage = {
-            id: Date.now() + 1,
-            role: 'ai',
-            text: aiResponse,
-            timestamp: Date.now(),
+          // Add user message
+          addMessage('user', userTranscript)
+
+          // Check if we've reached max turns
+          const newTurn = currentTurn + 1
+          setCurrentTurn(newTurn)
+
+          if (newTurn >= maxTurns) {
+            setConversationEnded(true)
+            setIsProcessing(false)
+            resolve()
+            return
           }
-          
-          setMessages(prev => [...prev, aiMessage])
-          setCurrentTurn(prev => prev + 1)
-          
-          // Speak AI's response
-          speakText(aiResponse)
-          
-          resolve(userText)
+
+          // Get AI response
+          const aiResponse = await getAIResponse(userTranscript)
+
+          if (aiResponse) {
+            addMessage('ai', aiResponse)
+            setCurrentTurn(prev => prev + 1)
+            await speakAIMessage(aiResponse)
+          }
+
+          resolve()
+
         } catch (err) {
-          setError('Failed to process your response. Please try again.')
           console.error('Processing error:', err)
+          setError('Failed to process response. Please try again.')
         } finally {
           setIsProcessing(false)
+          cleanupRecording()
         }
-
-        // Stop all tracks
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
       }
 
-      mediaRecorderRef.current.stop()
+      // Stop the recorder
+      try {
+        mediaRecorderRef.current.stop()
+      } catch (e) {
+        console.error('Error stopping recorder:', e)
+        setIsUserSpeaking(false)
+        setIsProcessing(false)
+        resolve()
+      }
+
+      // Stop the stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+      }
     })
-  }, [messages, currentTurn, maxTurns, speakText])
+  }, [currentTurn, maxTurns, addMessage, getAIResponse, speakAIMessage, cleanupRecording])
 
-  // Get AI's contextual response
-  const getAIResponse = async (conversationHistory) => {
-    const response = await fetch('/api/conversation/respond', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scenario: {
-          aiRole: scenario.aiRole,
-          context: scenario.context,
-        },
-        messages: conversationHistory,
-        turnNumber: currentTurn,
-        maxTurns: maxTurns,
-      }),
-    })
-
-    if (!response.ok) throw new Error('Failed to get AI response')
-
-    const data = await response.json()
-    return data.response
-  }
+  // Stop AI speaking
+  const stopAISpeaking = useCallback(() => {
+    stopAllAudio()
+  }, [stopAllAudio])
 
   // End conversation early
   const endConversation = useCallback(() => {
-    stopAISpeaking()
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
-    }
+    stopAllAudio()
+    cleanupRecording()
     setConversationEnded(true)
     setIsUserSpeaking(false)
-    setIsAISpeaking(false)
-  }, [stopAISpeaking])
+    setIsProcessing(false)
+  }, [stopAllAudio, cleanupRecording])
 
   // Reset conversation
   const resetConversation = useCallback(() => {
-    stopAISpeaking()
+    stopAllAudio()
+    cleanupRecording()
     setMessages([])
     setCurrentTurn(0)
     setConversationEnded(false)
     setError(null)
-  }, [stopAISpeaking])
+    setIsUserSpeaking(false)
+    setIsProcessing(false)
+    setIsAISpeaking(false)
+  }, [stopAllAudio, cleanupRecording])
 
   return {
     messages,
@@ -243,8 +375,8 @@ export default function useConversation(scenario, maxTurns = 7) {
     startConversation,
     startRecording,
     stopRecording,
+    stopAISpeaking,
     endConversation,
     resetConversation,
-    stopAISpeaking,
   }
 }

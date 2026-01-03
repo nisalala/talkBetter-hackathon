@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import useConversation from "@/hooks/useConversation";
 import { getScenariosByMode } from "@/utils/conversationScenarios";
@@ -54,11 +54,12 @@ export default function ConversationInterface({
     setSelectedScenario(scenario);
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!selectedScenario) return;
     setHasStarted(true);
     setStartTime(Date.now());
-    startConversation();
+    // AI starts the conversation
+    await startConversation();
   };
 
   const handleBack = () => {
@@ -193,48 +194,62 @@ export default function ConversationInterface({
     );
   }
 
-  // Pre-start Screen (Scenario Selected)
-  //   if (!hasStarted) {
-  //     return (
-  //       <div className="text-center">
-  //         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500
-  //                       flex items-center justify-center text-3xl mx-auto mb-4">
-  //           🎭
-  //         </div>
+  // Pre-start Screen (Scenario Selected but not started)
+  if (!hasStarted) {
+    return (
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500
+                      flex items-center justify-center text-3xl mx-auto mb-4">
+          🎭
+        </div>
 
-  //         <h3 className="text-xl font-bold text-white mb-2">{selectedScenario.name}</h3>
-  //         <p className="text-gray-400 mb-6">{selectedScenario.description}</p>
+        <h3 className="text-xl font-bold text-white mb-2">{selectedScenario.name}</h3>
+        <p className="text-gray-400 mb-6">{selectedScenario.description}</p>
 
-  //         <div className="glass rounded-xl p-4 mb-6 text-left max-w-md mx-auto">
-  //           <div className="text-sm text-gray-400 mb-2">You will be talking to:</div>
-  //           <div className="text-white font-medium">{selectedScenario.aiRole}</div>
-  //         </div>
+        <div className="glass rounded-xl p-4 mb-6 text-left max-w-md mx-auto">
+          <div className="text-sm text-gray-400 mb-2">You will be talking to:</div>
+          <div className="text-white font-medium">{selectedScenario.aiRole || 'AI Conversation Partner'}</div>
+          {selectedScenario.openingLine && (
+            <div className="mt-3 pt-3 border-t border-white/10">
+              <div className="text-sm text-gray-400 mb-1">They will start with:</div>
+              <div className="text-gray-300 text-sm italic">"{selectedScenario.openingLine.substring(0, 100)}..."</div>
+            </div>
+          )}
+        </div>
 
-  //         <div className="flex items-center justify-center gap-6 mb-6 text-sm text-gray-400">
-  //           <div className="flex items-center gap-2">
-  //             <span>💬</span> 7 exchanges
-  //           </div>
-  //           <div className="flex items-center gap-2">
-  //             <span>🎤</span> Voice-based
-  //           </div>
-  //           <div className="flex items-center gap-2">
-  //             <span>📊</span> Full analysis
-  //           </div>
-  //         </div>
-  // <div className='flex flex-col '>
-  //         <button
-  //           onClick={handleStart}
-  //           className="w-full max-w-md mx-auto py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500
-  //                    text-white font-semibold text-lg
-  //                    hover:from-indigo-400 hover:to-purple-400 transition-all
-  //                    shadow-lg shadow-indigo-500/25"
-  //         >
-  //           🎙️ Begin Conversation
-  //
-  //       </div>
-  //       </div>
-  //     )
-  //   }
+        <div className="flex items-center justify-center gap-6 mb-6 text-sm text-gray-400">
+          <div className="flex items-center gap-2">
+            <span>💬</span> 7 exchanges
+          </div>
+          <div className="flex items-center gap-2">
+            <span>🎤</span> Voice-based
+          </div>
+          <div className="flex items-center gap-2">
+            <span>📊</span> Full analysis
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 max-w-md mx-auto">
+          <button
+            onClick={handleStart}
+            className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500
+                     text-white font-semibold text-lg
+                     hover:from-indigo-400 hover:to-purple-400 transition-all
+                     shadow-lg shadow-indigo-500/25"
+          >
+            🎙️ Begin Conversation
+          </button>
+          
+          <button
+            onClick={handleBack}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            ← Choose different scenario
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Active Conversation Screen
   return (
@@ -278,7 +293,12 @@ export default function ConversationInterface({
       <div className="glass rounded-xl p-4 mb-4 max-h-[300px] overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-6">
-            Starting conversation...
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
+              <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+              <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+            </div>
+            <p className="mt-2">AI is starting the conversation...</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -349,7 +369,7 @@ export default function ConversationInterface({
             ) : (
               <button
                 onClick={startRecording}
-                disabled={isProcessing}
+                disabled={isProcessing || messages.length === 0}
                 className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 
                          hover:from-indigo-400 hover:to-purple-400
                          text-white transition-all flex items-center justify-center
@@ -373,11 +393,10 @@ export default function ConversationInterface({
             {isAISpeaking && "🔊 AI is speaking... Click to skip"}
             {isUserSpeaking && "🎤 Recording... Click to stop"}
             {isProcessing && "⏳ Processing your response..."}
-            {!isAISpeaking &&
-              !isUserSpeaking &&
-              !isProcessing &&
-              "🎤 Click to respond"}
+            {!isAISpeaking && !isUserSpeaking && !isProcessing && messages.length === 0 && "⏳ Waiting for AI to start..."}
+            {!isAISpeaking && !isUserSpeaking && !isProcessing && messages.length > 0 && "🎤 Click to respond"}
           </p>
+
           <div className="flex justify-center">
             <button
               onClick={handleBack}
@@ -386,6 +405,7 @@ export default function ConversationInterface({
               ← Choose different scenario
             </button>
           </div>
+
           {/* End early button */}
           {messages.length >= 2 && (
             <button

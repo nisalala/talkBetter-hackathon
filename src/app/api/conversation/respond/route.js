@@ -4,35 +4,43 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request) {
   try {
-    const { scenario, messages, turnNumber, maxTurns } = await request.json()
+    const { 
+      scenario, 
+      conversationHistory, 
+      currentTurn, 
+      maxTurns, 
+      isOpening 
+    } = await request.json()
 
-    // Build conversation history for context
-    const conversationHistory = messages.map(msg => ({
-      role: msg.role === 'ai' ? 'assistant' : 'user',
-      content: msg.text,
-    }))
+    // Safety check
+    if (!scenario) {
+      return NextResponse.json({ error: 'No scenario provided' }, { status: 400 })
+    }
 
-    // Determine if this should be a closing question
-    const isNearEnd = turnNumber >= maxTurns - 1
-    const closingInstruction = isNearEnd 
-      ? "This is near the end of the conversation. Start wrapping up naturally, perhaps with a closing question or statement."
-      : ""
+    // If it's the opening and we have an opening line, use it
+    if (isOpening && scenario.openingLine) {
+      return NextResponse.json({ response: scenario.openingLine })
+    }
 
-    const systemPrompt = `You are playing the role of: ${scenario.aiRole}
+    const systemPrompt = `You are playing the role of: ${scenario.aiRole || 'a conversation partner'}
 
-Context: ${scenario.context}
+SCENARIO: ${scenario.name}
+CONTEXT: ${scenario.context || scenario.description}
 
-IMPORTANT RULES:
-1. Stay in character at all times
-2. Keep responses conversational and natural (2-4 sentences max)
-3. Ask follow-up questions based on what the user actually said
-4. React authentically to their responses (show interest, concern, skepticism as appropriate)
-5. Don't be generic - reference specific things they mentioned
-6. ${closingInstruction}
+INSTRUCTIONS:
+- Stay in character throughout the conversation
+- Respond naturally and conversationally (2-3 sentences typically)
+- Ask follow-up questions when appropriate
+- Be engaging but realistic for the scenario
+- This is turn ${currentTurn} of ${maxTurns} total
 
-Current turn: ${turnNumber} of ${maxTurns}
+${currentTurn >= maxTurns - 1 ? 'This is near the end of the conversation. Start wrapping up naturally.' : ''}
+${currentTurn >= maxTurns ? 'This is the final turn. Conclude the conversation appropriately.' : ''}`
 
-Respond naturally as your character would, then ask a relevant follow-up question or make a statement that invites them to continue.`
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory,
+    ]
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -41,31 +49,28 @@ Respond naturally as your character would, then ask a relevant follow-up questio
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // Updated to use llama-3.3-70b-versatile (new model)
         model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...conversationHistory,
-        ],
+        messages,
         temperature: 0.8,
-        max_tokens: 150,
+        max_tokens: 200,
       }),
     })
 
     if (!response.ok) {
       const error = await response.text()
-      console.error('Groq API error:', error)
-      throw new Error('Failed to generate response')
+      console.error('Groq error:', error)
+      throw new Error('AI response failed')
     }
 
     const data = await response.json()
-    const aiResponse = data.choices[0]?.message?.content || "I see. Tell me more about that."
+    const aiResponse = data.choices[0]?.message?.content || "I'm sorry, I didn't catch that. Could you repeat?"
 
     return NextResponse.json({ response: aiResponse })
+
   } catch (error) {
     console.error('Conversation API error:', error)
     return NextResponse.json(
-      { error: 'Failed to generate response' },
+      { error: 'Failed to generate response', response: "I'm having trouble responding. Let's continue." },
       { status: 500 }
     )
   }
