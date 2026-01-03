@@ -7,6 +7,7 @@ import FeedbackCard from '@/components/FeedbackCard'
 import TranscriptViewer from '@/components/TranscriptViewer'
 import ComparisonRadar from '@/components/ComparisonRadar'
 import VoiceCoach from '@/components/VoiceCoach'
+import PricingModal from '@/components/PricingModal'
 import { useAuth } from '@/contexts/AuthContext'
 
 const modeNames = {
@@ -29,6 +30,9 @@ export default function ResultsPage() {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const [results, setResults] = useState(null)
+  
+  const [showPricing, setShowPricing] = useState(false)
+  const [upgradeTier, setUpgradeTier] = useState(null)
 
   useEffect(() => {
     const stored = sessionStorage.getItem('talkbetter_results')
@@ -94,7 +98,6 @@ export default function ResultsPage() {
             size="large" 
           />
           
-          {/* Metric scores */}
           <div className="grid grid-cols-2 gap-6">
             {analysis.scores && Object.entries(analysis.scores).map(([key, value]) => (
               <ScoreDisplay 
@@ -107,16 +110,12 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* ============================================ */}
-      {/* 🌟 WOW FACTOR #1: AI Voice Coach            */}
-      {/* ============================================ */}
+      {/* Voice Coach */}
       <div className="mb-8">
         <VoiceCoach feedback={analysis} score={analysis.overallScore || 0} />
       </div>
 
-      {/* ============================================ */}
-      {/* 🌟 WOW FACTOR #2: Comparison Radar Chart    */}
-      {/* ============================================ */}
+      {/* Comparison Radar Chart */}
       <div className="mb-8">
         <ComparisonRadar 
           userScores={analysis.scores || {}} 
@@ -184,6 +183,24 @@ export default function ResultsPage() {
       {/* Transcript */}
       <TranscriptViewer transcript={transcript} />
 
+      {/* Premium CTA - ALWAYS VISIBLE (changed from difficulty === 'gentle') */}
+      {true && (
+        <div className="glass rounded-2xl p-8 mb-8 border-2 border-indigo-500/30 bg-gradient-to-b from-indigo-500/10 to-purple-500/10 text-center">
+          <h3 className="text-2xl font-bold text-white mb-2">Do you want detailed report?</h3>
+          <p className="text-gray-400 mb-8">Unlock advanced metrics, deeper analysis, and unfiltered coaching feedback with Premium.</p>
+          
+          <button
+            onClick={() => {
+              setUpgradeTier('premium')
+              setShowPricing(true)
+            }}
+            className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 transition-all shadow-lg text-lg"
+          >
+            Premium report
+          </button>
+        </div>
+      )}
+
       {/* Track Progress CTA (only for non-logged in users) */}
       {!isAuthenticated && (
         <div className="glass rounded-2xl p-6 mb-8 border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
@@ -198,9 +215,7 @@ export default function ResultsPage() {
             </div>
             <button
               onClick={() => router.push('/profile')}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
-                       text-white font-semibold hover:from-indigo-400 hover:to-purple-400 
-                       transition-all whitespace-nowrap shadow-lg shadow-indigo-500/25"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold hover:from-indigo-400 hover:to-purple-400 transition-all whitespace-nowrap shadow-lg shadow-indigo-500/25"
             >
               Track My Progress
             </button>
@@ -212,31 +227,42 @@ export default function ResultsPage() {
       <div className="flex flex-col sm:flex-row gap-4 mt-8">
         <button
           onClick={() => router.push(`/record/${mode}`)}
-          className="flex-1 px-6 py-4 rounded-xl bg-white/5 hover:bg-white/10 
-                   text-white font-medium transition-colors text-center"
+          className="flex-1 px-6 py-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-colors text-center"
         >
           🔄 Try Again
         </button>
         {isAuthenticated ? (
           <button
             onClick={() => router.push('/profile')}
-            className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
-                     hover:from-indigo-400 hover:to-purple-400
-                     text-white font-medium transition-all text-center"
+            className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-medium transition-all text-center"
           >
             📈 View Progress
           </button>
         ) : (
           <button
             onClick={() => router.push('/')}
-            className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
-                     hover:from-indigo-400 hover:to-purple-400
-                     text-white font-medium transition-all text-center"
+            className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-medium transition-all text-center"
           >
             🎤 New Session
           </button>
         )}
       </div>
+
+      {/* Pricing Modal */}
+      {showPricing && upgradeTier && (
+        <PricingModal
+          tier={upgradeTier}
+          onClose={() => {
+            setShowPricing(false)
+            setUpgradeTier(null)
+          }}
+          onConfirm={(tier, type) => {
+            console.log(`Upgrading to ${tier} via ${type}`)
+            setShowPricing(false)
+            setUpgradeTier(null)
+          }}
+        />
+      )}
     </div>
   )
 }
