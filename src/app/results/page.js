@@ -1,3 +1,5 @@
+// src/app/results/page.js
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -57,6 +59,14 @@ export default function ResultsPage() {
 
   const difficultyInfo = difficultyLabels[difficulty] || difficultyLabels.balanced
 
+  // Helper to get timing status color
+  const getTimingStatusStyle = (status) => {
+    if (!status) return 'border-gray-500/30 bg-gray-500/10'
+    if (status === 'perfect') return 'border-green-500/30 bg-green-500/10'
+    if (status.includes('short')) return 'border-yellow-500/30 bg-yellow-500/10'
+    return 'border-orange-500/30 bg-orange-500/10'
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
@@ -66,8 +76,12 @@ export default function ResultsPage() {
           <span>{modeNames[mode]}</span>
           <span>•</span>
           <span>{formatDuration(duration)}</span>
-          <span>•</span>
-          <span>{difficultyInfo.icon} {difficultyInfo.name}</span>
+          {difficulty && (
+            <>
+              <span>•</span>
+              <span>{difficultyInfo.icon} {difficultyInfo.name}</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -78,10 +92,39 @@ export default function ResultsPage() {
             <span className="text-sm font-medium text-gray-400 uppercase tracking-wide">
               {question.isCustom ? '✏️ Custom Prompt' : '💡 Prompt'}
             </span>
+            {question.duration && (
+              <span className="text-sm text-gray-500">
+                • Target: {question.duration < 60 ? `${question.duration}s` : `${Math.floor(question.duration / 60)}m`}
+              </span>
+            )}
           </div>
           <p className="text-lg text-white leading-relaxed">
-            "{question.text}"
+            &quot;{question.text}&quot;
           </p>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* ⚠️ RELEVANCE WARNING (if off-topic)         */}
+      {/* ============================================ */}
+      {analysis.relevanceIssue && (
+        <div className="glass rounded-2xl p-6 mb-8 border-2 border-red-500/30 bg-red-500/10">
+          <div className="flex items-start gap-4">
+            <div className="text-3xl flex-shrink-0">⚠️</div>
+            <div>
+              <h3 className="text-lg font-semibold text-red-400 mb-2">Off-Topic Response Detected</h3>
+              <p className="text-gray-300 mb-3">{analysis.relevanceIssue}</p>
+              <p className="text-sm text-gray-400">
+                Your response didn&apos;t fully address the prompt. For the best feedback, make sure to answer the question directly.
+              </p>
+              {analysis.relevanceScore !== undefined && (
+                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/20">
+                  <span className="text-sm text-red-400">Relevance Score:</span>
+                  <span className="text-sm font-bold text-red-300">{analysis.relevanceScore}/100</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -124,6 +167,26 @@ export default function ResultsPage() {
         />
       </div>
 
+      {/* ============================================ */}
+      {/* ⏱️ TIMING FEEDBACK                          */}
+      {/* ============================================ */}
+      {analysis.metrics?.durationEvaluation && (
+        <div className={`glass rounded-xl p-4 mb-4 border ${getTimingStatusStyle(analysis.metrics.durationEvaluation.status)}`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">
+              {analysis.metrics.durationEvaluation.status === 'perfect' ? '✅' : 
+               analysis.metrics.durationEvaluation.status === 'too_short' ? '⏱️' :
+               analysis.metrics.durationEvaluation.status === 'slightly_short' ? '⏱️' :
+               '⏱️'}
+            </span>
+            <div>
+              <p className="text-white font-medium">Timing</p>
+              <p className="text-gray-300 text-sm">{analysis.metrics.durationEvaluation.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="glass rounded-xl p-4 text-center">
@@ -135,7 +198,12 @@ export default function ResultsPage() {
           <div className="text-sm text-gray-400">Total Words</div>
         </div>
         <div className="glass rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-white">{analysis.metrics?.fillerWords?.total || 0}</div>
+          <div className={`text-2xl font-bold ${
+            (analysis.metrics?.fillerWords?.total || 0) === 0 ? 'text-green-400' :
+            (analysis.metrics?.fillerWords?.total || 0) <= 3 ? 'text-yellow-400' : 'text-red-400'
+          }`}>
+            {analysis.metrics?.fillerWords?.total || 0}
+          </div>
           <div className="text-sm text-gray-400">Filler Words</div>
         </div>
         <div className="glass rounded-xl p-4 text-center">
@@ -144,13 +212,54 @@ export default function ResultsPage() {
         </div>
       </div>
 
+      {/* Filler Words Breakdown (if any) */}
+      {analysis.metrics?.fillerWords?.counts && Object.keys(analysis.metrics.fillerWords.counts).length > 0 && (
+        <div className="glass rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🔄</span>
+            <span className="text-white font-medium">Filler Words Used</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(analysis.metrics.fillerWords.counts)
+              .sort((a, b) => b[1] - a[1])
+              .map(([word, count]) => (
+                <span 
+                  key={word}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                    count >= 5 ? 'bg-red-500/20 text-red-400' :
+                    count >= 3 ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-gray-500/20 text-gray-400'
+                  }`}
+                >
+                  &quot;{word}&quot; × {count}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* WPM Rating */}
       {analysis.metrics?.wpmRating && (
-        <div className="glass rounded-xl p-4 mb-8">
-          <p className="text-gray-300">
-            <span className="font-medium text-white">Pace: </span>
-            {analysis.metrics.wpmRating.message}
-          </p>
+        <div className={`glass rounded-xl p-4 mb-8 border ${
+          analysis.metrics.wpmRating.status === 'good' ? 'border-green-500/30 bg-green-500/10' :
+          analysis.metrics.wpmRating.status === 'slow' || analysis.metrics.wpmRating.status === 'fast' 
+            ? 'border-yellow-500/30 bg-yellow-500/10' :
+          'border-orange-500/30 bg-orange-500/10'
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">
+              {analysis.metrics.wpmRating.status === 'good' ? '✅' : 
+               analysis.metrics.wpmRating.status === 'too_slow' ? '🐢' :
+               analysis.metrics.wpmRating.status === 'too_fast' ? '🐇' :
+               '🎯'}
+            </span>
+            <div>
+              <p className="text-white font-medium">
+                Speaking Pace: {analysis.metrics.wpmRating.rating || 'N/A'}
+              </p>
+              <p className="text-gray-300 text-sm">{analysis.metrics.wpmRating.message}</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -167,6 +276,35 @@ export default function ResultsPage() {
           type="improvements" 
         />
       </div>
+
+      {/* Timing & Pace Specific Feedback */}
+      {(analysis.timingFeedback || analysis.paceFeedback) && (
+        <div className="glass rounded-2xl p-6 mb-8">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <span>📊</span> Delivery Analysis
+          </h3>
+          <div className="space-y-4">
+            {analysis.timingFeedback && (
+              <div className="flex items-start gap-3">
+                <span className="text-xl">⏱️</span>
+                <div>
+                  <p className="text-white font-medium">Timing</p>
+                  <p className="text-gray-400 text-sm">{analysis.timingFeedback}</p>
+                </div>
+              </div>
+            )}
+            {analysis.paceFeedback && (
+              <div className="flex items-start gap-3">
+                <span className="text-xl">🎙️</span>
+                <div>
+                  <p className="text-white font-medium">Pace</p>
+                  <p className="text-gray-400 text-sm">{analysis.paceFeedback}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Rewritten Example */}
       {analysis.rewrittenExample && (
@@ -211,7 +349,7 @@ export default function ResultsPage() {
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 mt-8">
         <button
-          onClick={() => router.push(`/record/${mode}`)}
+          onClick={() => router.push('/')}
           className="flex-1 px-6 py-4 rounded-xl bg-white/5 hover:bg-white/10 
                    text-white font-medium transition-colors text-center"
         >

@@ -35,17 +35,12 @@ export default function CustomQuestionInput({
             ? "Enter a question or scenario to practice..."
             : "Type your own question or scenario..."
           }
-          className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 
-                   text-white placeholder:text-gray-500 
-                   focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500
-                   transition-all"
+          className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
         />
         <button
           onClick={handleSubmit}
           disabled={!customQuestion.trim()}
-          className="px-5 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-400 
-                   text-white font-medium transition-all
-                   disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-5 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-500"
         >
           Use
         </button>
