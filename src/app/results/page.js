@@ -208,34 +208,16 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4 mt-8">
+      {/* Action Buttons - center smaller New Session button */}
+      <div className="flex justify-center mt-8">
         <button
-          onClick={() => router.push(`/record/${mode}`)}
-          className="flex-1 px-6 py-4 rounded-xl bg-white/5 hover:bg-white/10 
-                   text-white font-medium transition-colors text-center"
+          onClick={() => router.push('/')}
+          className="w-44 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
+                   hover:from-indigo-400 hover:to-purple-400
+                   text-white font-medium transition-all text-center mx-auto"
         >
-          🔄 Try Again
+          🎤 New Session
         </button>
-        {isAuthenticated ? (
-          <button
-            onClick={() => router.push('/profile')}
-            className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
-                     hover:from-indigo-400 hover:to-purple-400
-                     text-white font-medium transition-all text-center"
-          >
-            📈 View Progress
-          </button>
-        ) : (
-          <button
-            onClick={() => router.push('/')}
-            className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
-                     hover:from-indigo-400 hover:to-purple-400
-                     text-white font-medium transition-all text-center"
-          >
-            🎤 New Session
-          </button>
-        )}
       </div>
     </div>
   )
