@@ -87,24 +87,29 @@ export default function ProfilePage() {
   const handleSubmit = (e) => {
     e.preventDefault()
     setError('')
+    const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
+    const trimmedEmail = email.trim()
+    const trimmedName = name.trim()
+
+    if (!trimmedEmail) {
+      setError('Please enter your email')
+      return
+    }
+    if (!isValidEmail(trimmedEmail)) {
+      setError('Please enter a valid email address')
+      return
+    }
 
     if (isSignUp) {
-      if (!name.trim()) {
+      if (!trimmedName) {
         setError('Please enter your name')
         return
       }
-      if (!email.trim()) {
-        setError('Please enter your email')
-        return
-      }
-      const result = signup(name, email)
+      const result = signup(trimmedName, trimmedEmail)
       if (!result.success) setError(result.error)
     } else {
-      if (!email.trim()) {
-        setError('Please enter your email')
-        return
-      }
-      const result = login(email)
+      const result = login(trimmedEmail)
       if (!result.success) setError(result.error)
     }
   }
@@ -178,17 +183,18 @@ export default function ProfilePage() {
   if (!isAuthenticated) {
     return (
       <div className="max-w-md mx-auto">
-        <div className="text-center mb-8">
-          <div className="text-6xl mb-4">📈</div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Track Your Progress
-          </h1>
-          <p className="text-gray-400">
-            Create a free profile to save your practice sessions and track improvement over time
-          </p>
-        </div>
-
         <div className="glass rounded-2xl p-8">
+          <div className="text-center mb-6">
+            <div className="mb-2">
+              <svg className="mx-auto w-12 h-12 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 3v18h18" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M7 13l4-4 4 4 6-6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-white">Save your practice — create a profile</h1>
+            <p className="text-sm text-gray-400">Sign in or create a profile to store sessions and track improvement.</p>
+          </div>
+
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => { setIsSignUp(true); setError('') }}
@@ -198,7 +204,7 @@ export default function ProfilePage() {
                   : 'bg-white/5 text-gray-400 hover:bg-white/10'
               }`}
             >
-              Sign Up
+              Create
             </button>
             <button
               onClick={() => { setIsSignUp(false); setError('') }}
@@ -208,7 +214,7 @@ export default function ProfilePage() {
                   : 'bg-white/5 text-gray-400 hover:bg-white/10'
               }`}
             >
-              Log In
+              Sign In
             </button>
           </div>
 
@@ -220,14 +226,14 @@ export default function ProfilePage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="John Doe"
+                  placeholder="Enter your name"
                   className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 
                            text-white placeholder-gray-500
                            focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             )}
-            
+
             <div>
               <label className="block text-sm text-gray-400 mb-2">Email</label>
               <input
@@ -246,7 +252,7 @@ export default function ProfilePage() {
                 {error}
               </p>
             )}
-            
+
             <button
               type="submit"
               className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 
@@ -258,33 +264,18 @@ export default function ProfilePage() {
             </button>
           </form>
 
-          {/* Benefits */}
-          <div className="mt-6 pt-6 border-t border-white/10">
-            <p className="text-sm text-gray-400 mb-3">With a profile you get:</p>
-            <ul className="space-y-2 text-sm text-gray-300">
-              <li className="flex items-center gap-2">
-                <span className="text-green-400">✓</span> Progress tracking with charts
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-400">✓</span> Session history
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-400">✓</span> Streak tracking 🔥
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-400">✓</span> Achievements & badges 🏆
-              </li>
-            </ul>
+          <div className="mt-6 text-center text-sm text-gray-400">
+            Progress charts · Session history · Achievements
           </div>
-        </div>
 
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => router.push('/')}
-            className="text-gray-400 hover:text-white transition-colors text-sm"
-          >
-            ← Back to Home
-          </button>
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => router.push('/')}
+              className="text-gray-400 hover:text-white transition-colors text-sm"
+            >
+              ← Back to Home
+            </button>
+          </div>
         </div>
       </div>
     )
