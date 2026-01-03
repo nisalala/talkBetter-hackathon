@@ -156,7 +156,7 @@ export default function RecordingInterface({
         mode: mode || 'general',
         question: questionData,
         analysis,
-        liveStats: stats, // Include live stats in results
+        liveStats: stats,
       }
 
       if (isAuthenticated) {
@@ -172,6 +172,20 @@ export default function RecordingInterface({
       setIsProcessing(false)
       setProcessingStage('')
     }
+  }
+
+  // Helper to get the title
+  const getTitle = () => {
+    if (isFreePractice) return '🎙️ Free Practice Mode'
+    if (modeData) return `${modeData.icon} ${modeData.name} Mode`
+    return '🎙️ Practice Mode'
+  }
+
+  // Helper to get the description/question text
+  const getDescription = () => {
+    if (question) return `"${question.text}"`
+    if (isFreePractice) return 'Practice anything - self introduciton, story telling, or rehearse'
+    return 'Select a prompt or start recording'
   }
 
   // Microphone Error State
@@ -210,7 +224,6 @@ export default function RecordingInterface({
   if (audioBlob) {
     return (
       <div className="animate-fadeIn">
-        {/* Live Feedback Popup (can still show during review) */}
         <LiveFeedback feedback={currentFeedback} onDismiss={dismissFeedback} />
 
         <div className="flex items-center justify-between mb-4">
@@ -218,23 +231,20 @@ export default function RecordingInterface({
             Review Your Recording
           </h4>
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full bg-white/10 text-sm text-gray-300">
-              ⏱️ {Math.floor(duration / 60)}:
-              {(duration % 60).toString().padStart(2, '0')}
+            <span className="px-3 py-1 rounded-full bg-white/10 text-sm text-gray-300 mt-8">
+              ⏱️ {Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, '0')}
             </span>
             {question?.duration && (
               <span
-                className={`px-3 py-1 rounded-full text-sm ${
-                  duration >= question.duration * 0.8 &&
-                  duration <= question.duration * 1.2
+                className={`px-3 py-1 rounded-full text-sm mt-8 ${
+                  duration >= question.duration * 0.8 && duration <= question.duration * 1.2
                     ? 'bg-green-500/20 text-green-400'
                     : duration < question.duration * 0.8
                     ? 'bg-yellow-500/20 text-yellow-400'
                     : 'bg-orange-500/20 text-orange-400'
                 }`}
               >
-                {duration >= question.duration * 0.8 &&
-                duration <= question.duration * 1.2
+                {duration >= question.duration * 0.8 && duration <= question.duration * 1.2
                   ? '✓ Good length'
                   : duration < question.duration * 0.8
                   ? '↓ A bit short'
@@ -244,7 +254,7 @@ export default function RecordingInterface({
           </div>
         </div>
 
-        {/* Live Stats Summary (if we have data) */}
+        {/* Live Stats Summary */}
         {showLiveFeedback && stats.wordCount > 0 && (
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="text-center p-2 rounded-lg bg-white/5">
@@ -266,10 +276,8 @@ export default function RecordingInterface({
           </div>
         )}
 
-        {/* Audio player */}
         <audio src={audioUrl} controls className="w-full mb-6 rounded-lg" />
 
-        {/* Action buttons */}
         <div className="flex gap-4">
           <button
             onClick={resetRecording}
@@ -280,18 +288,9 @@ export default function RecordingInterface({
                      flex items-center justify-center gap-2
                      border border-white/10 hover:border-white/20"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Record Again
           </button>
@@ -308,38 +307,16 @@ export default function RecordingInterface({
             {isProcessing ? (
               <>
                 <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                 </svg>
                 <span className="truncate">{processingStage}</span>
               </>
             ) : (
               <>
                 <span>Get AI Feedback</span>
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7l5 5m0 0l-5 5m5-5H6"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </>
             )}
@@ -349,14 +326,71 @@ export default function RecordingInterface({
     )
   }
 
-  // Active Recording State
+  // ============================================
+  // ACTIVE RECORDING STATE
+  // ============================================
   return (
-    <div className="text-center relative">
-      {/* Live Feedback Toast - positioned fixed */}
+    <div className="text-center">
+      {/* Live Feedback Toast */}
       <LiveFeedback feedback={currentFeedback} onDismiss={dismissFeedback} />
 
-      {/* Live Feedback Toggle - top right */}
-      <div className="absolute top-0 right-0 z-10">
+      {/* Header Section - Same layout as Free Practice */}
+      <div className="mb-6">
+        {/* Title Row with Controls */}
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <h3 className="text-xl font-bold text-white">
+            {getTitle()}
+          </h3>
+          
+          {/* Inline controls - Only show when there's a question */}
+          {question && !isFreePractice && (
+            <div className="flex items-center gap-1">
+              {/* Shuffle button */}
+              {!isCustom && onShuffle && (
+                <button
+                  onClick={onShuffle}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white 
+                           transition-all hover:rotate-180 duration-300"
+                  title="Shuffle question"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              )}
+              
+              {/* Clear custom button */}
+              {isCustom && onClearCustom && (
+                <button
+                  onClick={onClearCustom}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white transition-all"
+                  title="Back to prompts"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+              
+              {/* Duration badge - inline */}
+              {question.duration && (
+                <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-medium ml-1">
+                  {question.duration < 60 ? `${question.duration}s` : `${Math.floor(question.duration / 60)}m`}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Description/Question Text */}
+        <p className="text-gray-400 text-sm max-w-md mx-auto">
+          {getDescription()}
+        </p>
+      </div>
+
+      {/* Live Feedback Toggle - Below header, not overlapping */}
+      <div className="flex justify-center mb-4">
         <button
           onClick={() => setShowLiveFeedback(!showLiveFeedback)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -364,128 +398,11 @@ export default function RecordingInterface({
               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
               : 'bg-white/5 text-gray-400 border border-white/10'
           }`}
-          title={showLiveFeedback ? 'Disable live feedback' : 'Enable live feedback'}
         >
           <span className={`w-2 h-2 rounded-full ${showLiveFeedback ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`} />
           Live Coach {showLiveFeedback ? 'ON' : 'OFF'}
         </button>
       </div>
-
-      {/* Mode Header - Show for non-free-practice modes */}
-      {!isFreePractice && modeData && (
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="text-2xl">{modeData.icon}</span>
-          <h3 className="text-lg font-bold text-white">{modeData.name}</h3>
-        </div>
-      )}
-
-      {/* Free Practice Header */}
-      {isFreePractice && !question && (
-        <div className="mb-6">
-          <h3 className="text-xl font-bold text-white mb-1">
-            🎙️ Free Practice Mode
-          </h3>
-          <p className="text-gray-400 text-sm">
-            Practice anything - introduce yourself, tell a story, or rehearse a
-            speech
-          </p>
-        </div>
-      )}
-
-      {/* Question/Prompt Display */}
-      {question && (
-        <div className="mb-2">
-          <div className="p-4 flex justify-center">
-            <div className="flex gap-10 items-center">
-              {/* Prompt Label with Controls */}
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    isCustom
-                      ? 'bg-purple-500/20 text-purple-400'
-                      : 'bg-indigo-500/20 text-indigo-400'
-                  }`}
-                >
-                  {isCustom ? '✏️ Custom' : '💡 Prompt'}
-                </span>
-
-                {/* Shuffle button (only for non-custom, non-free-practice) */}
-                {!isCustom && !isFreePractice && onShuffle && (
-                  <button
-                    onClick={onShuffle}
-                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-gray-400 hover:text-white 
-                               transition-all hover:rotate-180 duration-300"
-                    title="Shuffle question"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                  </button>
-                )}
-
-                {/* Clear custom button */}
-                {isCustom && onClearCustom && (
-                  <button
-                    onClick={onClearCustom}
-                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-gray-400 hover:text-white transition-all"
-                    title={isFreePractice ? 'Clear prompt' : 'Back to prompts'}
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </div>
-
-              {/* Question Text */}
-              <p className="text-white text-lg leading-relaxed text-center">
-                &quot;{question.text}&quot;
-              </p>
-
-              {/* Duration badge */}
-              {question.duration && (
-                <div className="flex text-center px-4 py-3 bg-white/5 rounded-xl">
-                  <div className="text-2xl font-bold text-indigo-400">
-                    {question.duration < 60
-                      ? question.duration
-                      : Math.floor(question.duration / 60)}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {question.duration < 60 ? 'sec' : 'min'}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Recording Section Header (when question exists) */}
-      {question && (
-        <p className="text-gray-400 text-sm mb-4">
-          Speak naturally and clearly
-        </p>
-      )}
 
       {/* Live Stats - Show while recording */}
       {isRecording && !isPaused && showLiveFeedback && (
@@ -512,18 +429,9 @@ export default function RecordingInterface({
                      hover:scale-105 active:scale-95 flex-shrink-0"
             title="Restart recording"
           >
-            <svg
-              className="w-6 h-6 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
         )}
@@ -548,7 +456,7 @@ export default function RecordingInterface({
           : 'Click the microphone to start recording'}
       </p>
 
-      {/* Recording error during recording */}
+      {/* Recording error */}
       {error && isRecording && (
         <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
           {error}

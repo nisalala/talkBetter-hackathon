@@ -3,14 +3,14 @@
 'use client'
 
 export default function LiveStats({ stats }) {
-  const { wordCount, wpm, fillerCount, sentenceCount, avgWordsPerSentence } = stats
+  const { wordCount, wpm, fillerCount, sentenceCount } = stats
 
   const getPaceStatus = () => {
-    if (wpm === 0) return { label: 'Start speaking...', color: 'text-gray-400', bg: 'bg-gray-500/20' }
-    if (wpm < 100) return { label: '🐢 Too slow', color: 'text-yellow-400', bg: 'bg-yellow-500/20' }
-    if (wpm > 170) return { label: '🐇 Too fast', color: 'text-orange-400', bg: 'bg-orange-500/20' }
-    if (wpm >= 120 && wpm <= 150) return { label: '✨ Perfect!', color: 'text-green-400', bg: 'bg-green-500/20' }
-    return { label: '👍 Good', color: 'text-blue-400', bg: 'bg-blue-500/20' }
+    if (wpm === 0) return { label: '...', color: 'text-gray-400', bg: 'bg-gray-500/20' }
+    if (wpm < 100) return { label: '🐢', color: 'text-yellow-400', bg: 'bg-yellow-500/20' }
+    if (wpm > 170) return { label: '🐇', color: 'text-orange-400', bg: 'bg-orange-500/20' }
+    if (wpm >= 120 && wpm <= 150) return { label: '✨', color: 'text-green-400', bg: 'bg-green-500/20' }
+    return { label: '👍', color: 'text-blue-400', bg: 'bg-blue-500/20' }
   }
 
   const getFillerStatus = () => {
@@ -23,68 +23,56 @@ export default function LiveStats({ stats }) {
   const fillerStatus = getFillerStatus()
 
   return (
-    <div className="glass rounded-xl p-4 mb-6 animate-fadeIn">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-sm font-medium text-gray-400">Live Stats</span>
-        </div>
-        <div className={`px-3 py-1 rounded-full text-sm font-medium ${paceStatus.color} ${paceStatus.bg}`}>
-          {paceStatus.label}
-        </div>
+    <div className="flex items-center justify-center gap-4 mb-4">
+      {/* Words */}
+      <div className="text-center">
+        <div className="text-lg font-bold text-white">{wordCount}</div>
+        <div className="text-[10px] text-gray-500 uppercase">Words</div>
       </div>
       
-      {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-3">
-        {/* Words */}
-        <div className="text-center p-2 rounded-lg bg-white/5">
-          <div className="text-xl font-bold text-white">{wordCount}</div>
-          <div className="text-xs text-gray-500">Words</div>
+      {/* Divider */}
+      <div className="w-px h-8 bg-white/10" />
+      
+      {/* WPM with status */}
+      <div className="text-center">
+        <div className={`text-lg font-bold ${paceStatus.color} flex items-center justify-center gap-1`}>
+          {wpm || '-'}
+          <span className="text-sm">{paceStatus.label}</span>
         </div>
-        
-        {/* WPM */}
-        <div className={`text-center p-2 rounded-lg ${paceStatus.bg}`}>
-          <div className={`text-xl font-bold ${paceStatus.color}`}>
-            {wpm || '-'}
-          </div>
-          <div className="text-xs text-gray-500">WPM</div>
+        <div className="text-[10px] text-gray-500 uppercase">WPM</div>
+      </div>
+      
+      {/* Divider */}
+      <div className="w-px h-8 bg-white/10" />
+      
+      {/* Fillers */}
+      <div className="text-center">
+        <div className={`text-lg font-bold ${fillerStatus.color}`}>
+          {fillerCount}
         </div>
-        
-        {/* Fillers */}
-        <div className={`text-center p-2 rounded-lg ${fillerStatus.bg}`}>
-          <div className={`text-xl font-bold ${fillerStatus.color}`}>
-            {fillerCount}
-          </div>
-          <div className="text-xs text-gray-500">Fillers</div>
-        </div>
-        
-        {/* Sentences */}
-        <div className="text-center p-2 rounded-lg bg-white/5">
-          <div className="text-xl font-bold text-white">{sentenceCount || 0}</div>
-          <div className="text-xs text-gray-500">Sentences</div>
-        </div>
+        <div className="text-[10px] text-gray-500 uppercase">Fillers</div>
       </div>
 
-      {/* Filler word breakdown (if any) */}
+      {/* Filler words popup - only show if there are fillers */}
       {stats.fillerWords && Object.keys(stats.fillerWords).length > 0 && (
-        <div className="mt-3 pt-3 border-t border-white/10">
-          <div className="flex flex-wrap gap-2">
+        <>
+          <div className="w-px h-8 bg-white/10" />
+          <div className="flex gap-1">
             {Object.entries(stats.fillerWords)
               .sort((a, b) => b[1] - a[1])
-              .slice(0, 4)
+              .slice(0, 2)
               .map(([word, count]) => (
                 <span 
                   key={word}
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                     count >= 3 ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'
                   }`}
                 >
-                  "{word}" × {count}
+                  {word}:{count}
                 </span>
               ))}
           </div>
-        </div>
+        </>
       )}
     </div>
   )
