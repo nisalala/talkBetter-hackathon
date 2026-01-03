@@ -45,7 +45,8 @@ export default function CustomQuestionInput({
           disabled={!customQuestion.trim()}
           className="px-5 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-400 
                    text-white font-medium transition-all
-                   disabled:opacity-50 disabled:cursor-not-allowed"
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   disabled:hover:bg-indigo-500"
         >
           Use
         </button>

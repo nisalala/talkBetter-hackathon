@@ -2,7 +2,7 @@
 
 'use client'
 
-import { getModeStyle } from '@/utils/modeConfig'
+import { getModeStyle, getModeDescription } from '@/utils/modeConfig'
 import { modeQuestions } from '@/utils/modeQuestions'
 
 export default function QuestionCard({ 
@@ -16,25 +16,43 @@ export default function QuestionCard({
   
   const modeData = modeQuestions[mode]
   const style = getModeStyle(mode)
+  const description = getModeDescription(mode)
+  const isFreePractice = mode === 'general'
 
   return (
     <div className="mb-8 pb-8 border-b border-white/10">
-      {/* Header */}
-      {modeData && mode !== 'general' && (
+      {/* Header - Show for all modes except general */}
+      {modeData && !isFreePractice && (
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <span>{modeData.icon}</span>
             {modeData.name}
           </h3>
+          <p className="text-gray-400 text-sm hidden sm:block">{description}</p>
+        </div>
+      )}
+
+      {/* Custom Prompt Header for Free Practice */}
+      {isFreePractice && isCustom && (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <span>🎙️</span>
+            Free Practice
+          </h3>
+          <p className="text-gray-400 text-sm hidden sm:block">Custom prompt</p>
         </div>
       )}
       
       {/* Question Display */}
-      <div className={`p-4 rounded-xl bg-white/5 border border-white/10`}>
+      <div className="p-4 rounded-xl bg-white/5 border border-white/10">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-medium">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                isCustom 
+                  ? 'bg-purple-500/20 text-purple-400' 
+                  : 'bg-indigo-500/20 text-indigo-400'
+              }`}>
                 {isCustom ? '✏️ Custom' : '💡 Prompt'}
               </span>
               
@@ -58,7 +76,7 @@ export default function QuestionCard({
                 <button
                   onClick={onClear}
                   className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-gray-400 hover:text-white transition-all"
-                  title="Back to prompts"
+                  title={isFreePractice ? "Clear prompt" : "Back to prompts"}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
