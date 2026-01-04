@@ -8,8 +8,9 @@ import { getModesForTabs, getModeStyle, DEFAULT_MODE } from '@/utils/modeConfig'
 import { useAuth } from '@/contexts/AuthContext'
 import RecordingInterface from '@/components/RecordingInterface'
 import CustomQuestionInput from '@/components/CustomQuestionInput'
-import ConversationInterface from '@/components/ConservationInterface'
+
 import PricingModal from '@/components/PricingModal'
+import ConversationInterface from '@/components/ConservationInterface'
 
 // Get all modes for tabs
 const allModes = getModesForTabs()
@@ -25,6 +26,9 @@ export default function Home() {
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [showPricingModal, setShowPricingModal] = useState(false)
   const [mounted, setMounted] = useState(false)
+  
+  // Key to force re-render of child components when mode changes
+  const [componentKey, setComponentKey] = useState(0)
 
   // Handle hydration - only render auth-dependent UI after mount
   useEffect(() => {
@@ -73,14 +77,16 @@ export default function Home() {
       usedQuestionIds
     )
 
-    if (resetUsed) {
-      setUsedQuestionIds([question.id])
-    } else {
-      setUsedQuestionIds((prev) => [...prev, question.id])
-    }
+    if (question) {
+      if (resetUsed) {
+        setUsedQuestionIds([question.id])
+      } else {
+        setUsedQuestionIds((prev) => [...prev, question.id])
+      }
 
-    setCurrentQuestion(question)
-    setIsCustomMode(false)
+      setCurrentQuestion(question)
+      setIsCustomMode(false)
+    }
   }, [isFreePractice, modeQuestionsData, usedQuestionIds, getRandomQuestion])
 
   // When mode changes, get a random question (only for question-based modes)
@@ -97,19 +103,23 @@ export default function Home() {
     }
   }, [selectedMode, isFreePractice, getRandomQuestion])
 
-  // Handle tab click
+  // Handle tab click - Reset all state and force re-render
   const handleTabClick = (modeId) => {
     if (selectedMode === modeId) return
+    
+    // Reset all states
     setSelectedMode(modeId)
     setIsCustomMode(false)
+    setInteractionType('single') // Always reset to single when changing modes
+    setComponentKey(prev => prev + 1) // Force re-render of child components
   }
 
-  // ✅ UPDATED: Handle custom question with duration
+  // Handle custom question with duration
   const handleCustomQuestion = (questionText, duration = 60) => {
     setCurrentQuestion({
       id: 'custom',
       text: questionText,
-      duration: duration, // Now accepts custom duration from slider
+      duration: duration,
       isCustom: true,
       tips: [],
     })
@@ -137,8 +147,10 @@ export default function Home() {
         return
       }
       setInteractionType('two-way')
+      setComponentKey(prev => prev + 1) // Force re-render when switching
     } else {
       setInteractionType('single')
+      setComponentKey(prev => prev + 1) // Force re-render when switching
     }
   }
 
@@ -181,37 +193,40 @@ export default function Home() {
       {/* MAIN CONTAINER - Recording/Conversation     */}
       {/* ============================================ */}
       <div className="relative glass rounded-2xl p-6 md:p-8 mb-6">
-        {/* Interaction Type Toggle */}
-        <div className="absolute top-3 right-3 sm:top-4 sm:right-5 z-10">
-          <button
-            onClick={handleInteractionToggle}
-            className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2
-              ${interactionType === 'two-way'
-                ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30'
-                : 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10'
-              }`}
-          >
-            {interactionType === 'two-way' ? (
-              <>
-                <span>🎙️</span>
-                <span className="hidden sm:inline">Single</span>
-              </>
-            ) : (
-              <>
-                <span>💬</span>
-                <span className="hidden sm:inline">Two-way</span>
-                <span className="sm:hidden">2-way</span>
-                {mounted && !hasPremiumAccess && (
-                  <span className="text-yellow-400 text-xs">🔒</span>
-                )}
-              </>
-            )}
-          </button>
-        </div>
+        {/* Interaction Type Toggle - Hide for free practice */}
+        {!isFreePractice && (
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-5 z-10">
+            <button
+              onClick={handleInteractionToggle}
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2
+                ${interactionType === 'two-way'
+                  ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30'
+                  : 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10'
+                }`}
+            >
+              {interactionType === 'two-way' ? (
+                <>
+                  <span>🎙️</span>
+                  <span className="hidden sm:inline">Single</span>
+                </>
+              ) : (
+                <>
+                  <span>💬</span>
+                  <span className="hidden sm:inline">Two-way</span>
+                  <span className="sm:hidden">2-way</span>
+                  {mounted && !hasPremiumAccess && (
+                    <span className="text-yellow-400 text-xs">🔒</span>
+                  )}
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
-        {/* Conditional Interface Rendering */}
-        {interactionType === 'single' ? (
+        {/* Conditional Interface Rendering with Key for Force Re-render */}
+        {interactionType === 'single' || isFreePractice ? (
           <RecordingInterface
+            key={`recording-${componentKey}-${selectedMode}`}
             mode={selectedMode}
             question={currentQuestion}
             isCustom={isCustomMode}
@@ -221,6 +236,7 @@ export default function Home() {
           />
         ) : (
           <ConversationInterface
+            key={`conversation-${componentKey}-${selectedMode}`}
             mode={selectedMode}
             isFreePractice={isFreePractice}
           />
@@ -228,15 +244,15 @@ export default function Home() {
       </div>
 
       {/* Custom Question Section - Only show for single interaction mode */}
-      {interactionType === 'single' && !isCustomMode && (
+      {(interactionType === 'single' || isFreePractice) && !isCustomMode && (
         <CustomQuestionInput
           isFreePractice={isFreePractice}
           onSubmit={handleCustomQuestion}
         />
       )}
 
-      {/* Premium Upsell Banner */}
-      {mounted && interactionType === 'single' && !hasPremiumAccess && (
+      {/* Premium Upsell Banner - Hide for free practice */}
+      {mounted && interactionType === 'single' && !isFreePractice && !hasPremiumAccess && (
         <div className="glass rounded-2xl p-4 mb-6 border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">

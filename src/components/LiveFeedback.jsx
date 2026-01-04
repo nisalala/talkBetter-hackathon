@@ -86,6 +86,20 @@ const feedbackTypes = {
     borderColor: 'border-orange-500/50',
     textColor: 'text-orange-400',
   },
+
+  // Context awareness (NEW)
+  context_warning: {
+    icon: '🎯',
+    color: 'from-red-500/20 to-orange-500/20',
+    borderColor: 'border-red-500/50',
+    textColor: 'text-red-400',
+  },
+  context_hint: {
+    icon: '📌',
+    color: 'from-orange-500/20 to-yellow-500/20',
+    borderColor: 'border-orange-500/50',
+    textColor: 'text-orange-400',
+  },
 }
 
 export default function LiveFeedback({ feedback, onDismiss }) {
@@ -141,10 +155,10 @@ export default function LiveFeedback({ feedback, onDismiss }) {
                     animate-slideUp
                     ${feedback.priority === 'high' ? 'ring-2 ring-white/20' : ''}`}
         >
-          {/* Animated icon */}
+          {/* Animated icon - ONLY ICON SOURCE */}
           <span className="text-3xl animate-bounce">{style.icon}</span>
           
-          {/* Message */}
+          {/* Message - NO DUPLICATE EMOJI */}
           <p className={`font-semibold text-lg ${style.textColor} max-w-md`}>
             {feedback.message}
           </p>

@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import useAudioRecorder from '@/hooks/useAudioRecorder'
 import useLiveFeedback from '@/hooks/useLiveFeedback'
@@ -32,6 +32,7 @@ export default function RecordingInterface({
   const [processingStage, setProcessingStage] = useState('')
   const [showLiveFeedback, setShowLiveFeedback] = useState(true)
   const [liveFeedbackToast, setLiveFeedbackToast] = useState(null)
+  const [isReady, setIsReady] = useState(false)
 
   // Get mode data
   const modeData = modeQuestions[mode]
@@ -53,13 +54,7 @@ export default function RecordingInterface({
   } = useAudioRecorder()
 
   // Live feedback hook - now with context awareness
-  const {
-    currentFeedback,
-    dismissFeedback,
-    stats,
-    startFeedback,
-    stopFeedback,
-  } = useLiveFeedback({
+  const liveFeedback = useLiveFeedback({
     targetDuration: question?.duration || 60,
     isRecording,
     currentDuration: duration,
@@ -67,11 +62,41 @@ export default function RecordingInterface({
     questionText: question?.text || '',
   })
 
+  // Extract values with defaults to prevent errors
+  const currentFeedback = liveFeedback?.currentFeedback || null
+  const dismissFeedback = liveFeedback?.dismissFeedback || (() => {})
+  const stats = liveFeedback?.stats || { wordCount: 0, wpm: 0, fillerCount: 0, silenceCount: 0 }
+  const startFeedback = liveFeedback?.startFeedback || (() => {})
+  const stopFeedback = liveFeedback?.stopFeedback || (() => {})
+
   // Track live feedback state with ref to prevent infinite loops
   const liveFeedbackActiveRef = useRef(false)
 
+  // Reset everything when component mounts (due to key change)
+  useEffect(() => {
+    setIsProcessing(false)
+    setProcessingStage('')
+    setLiveFeedbackToast(null)
+    liveFeedbackActiveRef.current = false
+    
+    // Small delay to ensure clean mount
+    const timer = setTimeout(() => {
+      setIsReady(true)
+    }, 50)
+
+    return () => {
+      clearTimeout(timer)
+      if (liveFeedbackActiveRef.current) {
+        stopFeedback()
+        liveFeedbackActiveRef.current = false
+      }
+    }
+  }, [])
+
   // Handle live feedback start/stop
   useEffect(() => {
+    if (!isReady) return
+    
     const shouldRun = isRecording && showLiveFeedback && !isPaused
 
     if (shouldRun && !liveFeedbackActiveRef.current) {
@@ -81,7 +106,7 @@ export default function RecordingInterface({
       liveFeedbackActiveRef.current = false
       stopFeedback()
     }
-  }, [isRecording, isPaused, showLiveFeedback, startFeedback, stopFeedback])
+  }, [isRecording, isPaused, showLiveFeedback, startFeedback, stopFeedback, isReady])
 
   // Handle live feedback toast - show briefly then auto-dismiss
   useEffect(() => {
@@ -95,33 +120,24 @@ export default function RecordingInterface({
     }
   }, [currentFeedback, dismissFeedback])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (liveFeedbackActiveRef.current) {
-        stopFeedback()
-      }
-    }
-  }, [stopFeedback])
-
-  const handleStartRecording = () => {
+  const handleStartRecording = useCallback(() => {
     startRecording()
-  }
+  }, [startRecording])
 
-  const handleStopRecording = () => {
+  const handleStopRecording = useCallback(() => {
     liveFeedbackActiveRef.current = false
     stopFeedback()
     stopRecording()
-  }
+  }, [stopFeedback, stopRecording])
 
-  const handleRestartRecording = () => {
+  const handleRestartRecording = useCallback(() => {
     liveFeedbackActiveRef.current = false
     stopFeedback()
     resetRecording()
     setTimeout(() => {
       startRecording()
     }, 100)
-  }
+  }, [stopFeedback, resetRecording, startRecording])
 
   // Check if recording is too short
   const isTooShort = duration < MIN_RECORDING_DURATION
@@ -264,6 +280,18 @@ export default function RecordingInterface({
       default:
         return '💡'
     }
+  }
+
+  // Show loading state briefly to ensure clean render
+  if (!isReady) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-pulse">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/10"></div>
+          <div className="h-4 w-32 mx-auto bg-white/10 rounded"></div>
+        </div>
+      </div>
+    )
   }
 
   // Microphone Error State
@@ -460,7 +488,7 @@ export default function RecordingInterface({
       )}
 
       {/* Header Section */}
-      <div className="mb-6">
+      <div className="mb-6 pt-2">
         {/* Title Row with Controls */}
         <div className="flex items-center justify-center gap-3 mb-1">
           <h3 className="text-xl font-bold text-white">
